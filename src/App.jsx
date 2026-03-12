@@ -1,6 +1,15 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { auth, db } from "./firebase";
-import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile } from "firebase/auth";
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  updateProfile,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect
+} from "firebase/auth";
 import { collection, doc, onSnapshot, setDoc, deleteDoc, updateDoc } from "firebase/firestore";
 
 const PLATFORMS = ["Wallapop", "Vinted"];
@@ -42,6 +51,28 @@ input,select,button{font-family:inherit}input,select{color-scheme:dark}
 
 const inputS = { width:"100%",background:"#111",border:"1px solid #333",borderRadius:10,padding:"14px 16px",color:"#eee",fontSize:15,outline:"none" };
 const btnP = { background:"#0d3",color:"#000",border:"none",padding:"16px 24px",borderRadius:12,fontWeight:800,fontSize:15,cursor:"pointer",width:"100%" };
+const btnGoogle = { background:"#fff",color:"#111",border:"none",padding:"14px 24px",borderRadius:12,fontWeight:800,fontSize:14,cursor:"pointer",width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:10 };
+
+const AUTH_ERROR_MESSAGES = {
+  "auth/email-already-in-use": "Ese email ya está registrado",
+  "auth/invalid-email": "Email no válido",
+  "auth/weak-password": "Mínimo 6 caracteres",
+  "auth/invalid-credential": "Email o contraseña incorrectos",
+  "auth/user-not-found": "No existe esa cuenta",
+  "auth/wrong-password": "Contraseña incorrecta",
+  "auth/popup-closed-by-user": "Has cerrado la ventana de Google",
+  "auth/popup-blocked": "El navegador bloqueó la ventana emergente",
+  "auth/cancelled-popup-request": "Se canceló la solicitud de acceso",
+  "auth/account-exists-with-different-credential": "Ese email ya usa otro método de acceso",
+  "auth/operation-not-allowed": "Google login no está activado en Firebase",
+  "auth/unauthorized-domain": "Dominio no autorizado en Firebase Auth",
+  "auth/network-request-failed": "Error de red. Revisa tu conexión"
+};
+
+const getAuthErrorMessage = (error) => AUTH_ERROR_MESSAGES[error?.code] || "No se pudo iniciar sesión. Inténtalo otra vez.";
+
+const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: "select_account" });
 
 function Badge({children,color="neutral"}) {
   const c = {green:{background:"#0d3",color:"#001a00"},red:{background:"#f43",color:"#fff"},yellow:{background:"#fd0",color:"#1a1400"},blue:{background:"#08f",color:"#fff"},purple:{background:"#a855f7",color:"#fff"},neutral:{background:"#333",color:"#ccc"},orange:{background:"#f90",color:"#1a0e00"}};
@@ -81,6 +112,7 @@ function MiniBar({data,color="#0d3"}) {
 function LoginScreen() {
   const [email,setEmail]=useState("");const [pass,setPass]=useState("");const [name,setName]=useState("");
   const [isReg,setIsReg]=useState(false);const [error,setError]=useState("");const [loading,setLoading]=useState(false);
+  const [googleLoading,setGoogleLoading]=useState(false);
   const submit = async()=>{
     if(!email||!pass) return setError("Rellena email y contraseña");
     if(isReg&&!name) return setError("Pon tu nombre");
@@ -89,9 +121,31 @@ function LoginScreen() {
       if(isReg){const cred=await createUserWithEmailAndPassword(auth,email,pass);await updateProfile(cred.user,{displayName:name});}
       else await signInWithEmailAndPassword(auth,email,pass);
     } catch(e) {
-      const m={"auth/email-already-in-use":"Ese email ya está registrado","auth/invalid-email":"Email no válido","auth/weak-password":"Mínimo 6 caracteres","auth/invalid-credential":"Email o contraseña incorrectos","auth/user-not-found":"No existe esa cuenta","auth/wrong-password":"Contraseña incorrecta"};
-      setError(m[e.code]||e.message);
-    } setLoading(false);
+      setError(getAuthErrorMessage(e));
+    } finally { setLoading(false); }
+  };
+  const submitGoogle = async()=>{
+    setError("");setGoogleLoading(true);
+    let redirectStarted=false;
+    try {
+      await signInWithPopup(auth,googleProvider);
+    } catch(e) {
+      const shouldUseRedirect=["auth/popup-blocked","auth/operation-not-supported-in-this-environment"].includes(e.code);
+      if(shouldUseRedirect){
+        try {
+          redirectStarted=true;
+          await signInWithRedirect(auth,googleProvider);
+          return;
+        } catch(redirectError) {
+          redirectStarted=false;
+          setError(getAuthErrorMessage(redirectError));
+        }
+      } else {
+        setError(getAuthErrorMessage(e));
+      }
+    } finally {
+      if(!redirectStarted) setGoogleLoading(false);
+    }
   };
   return <div style={{height:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
     <style>{globalCSS}</style>
@@ -103,7 +157,16 @@ function LoginScreen() {
       <Field label="Email"><input type="email" placeholder="tu@email.com" value={email} onChange={e=>setEmail(e.target.value)} style={inputS} autoCapitalize="none"/></Field>
       <Field label="Contraseña"><input type="password" placeholder="Mínimo 6 caracteres" value={pass} onChange={e=>setPass(e.target.value)} style={inputS} onKeyDown={e=>e.key==="Enter"&&submit()}/></Field>
       {error&&<div style={{background:"#1a0808",border:"1px solid #3a1515",borderRadius:10,padding:"10px 14px",fontSize:12,color:"#f43",marginBottom:14}}>{error}</div>}
-      <button onClick={submit} disabled={loading} style={{...btnP,opacity:loading?.5:1,marginBottom:14}}>{loading?"...":isReg?"Crear cuenta":"Entrar"}</button>
+      <button onClick={submit} disabled={loading||googleLoading} style={{...btnP,opacity:(loading||googleLoading)?.5:1,marginBottom:10}}>{loading?"...":isReg?"Crear cuenta":"Entrar"}</button>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+        <div style={{flex:1,height:1,background:"#1f1f1f"}}/>
+        <span style={{fontSize:10,color:"#555",textTransform:"uppercase",letterSpacing:1}}>o</span>
+        <div style={{flex:1,height:1,background:"#1f1f1f"}}/>
+      </div>
+      <button onClick={submitGoogle} disabled={loading||googleLoading} style={{...btnGoogle,opacity:(loading||googleLoading)?.5:1,marginBottom:8}}>
+        <span style={{fontSize:16,lineHeight:1}}>G</span>
+        <span>{googleLoading?"Conectando...":"Continuar con Google"}</span>
+      </button>
       <button onClick={()=>{setIsReg(!isReg);setError("");}} style={{background:"transparent",border:"none",color:"#555",fontSize:12,cursor:"pointer",width:"100%",padding:10}}>{isReg?"Ya tengo cuenta → Iniciar sesión":"No tengo cuenta → Registrarme"}</button>
     </div>
   </div>;

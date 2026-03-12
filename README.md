@@ -1,11 +1,11 @@
 # 📦 Resale Tracker — Amazon Returns
 
 App móvil (PWA) para gestionar tu negocio de paquetes de devoluciones de Amazon.
-Conectada a Firebase: login con contraseña y datos compartidos en tiempo real entre todos los usuarios.
+Conectada a Firebase: login con email/contraseña o Google y datos compartidos en tiempo real entre todos los usuarios.
 
 ## Funcionalidades
 
-- Login con email y contraseña (cada miembro de la familia crea su cuenta)
+- Login con email/contraseña o Google
 - Datos compartidos en tiempo real (lo que uno añade, todos lo ven al instante)
 - Registro de paquetes con coste automático (6€ martes / 3€ miércoles)
 - Productos por paquete (divide el coste automáticamente)
@@ -33,7 +33,15 @@ npm run dev
 
 Abre http://localhost:5173 — deberías ver la pantalla de login.
 
-### 3. Sube a GitHub
+### 3. Activa Google Login en Firebase (1 sola vez)
+
+1. Firebase Console → **Authentication** → **Sign-in method** → **Google**.
+2. Activa Google, añade tu correo de soporte y guarda.
+3. En **Authentication** → **Settings** → **Authorized domains**, añade:
+   - `localhost`
+   - tu dominio de Vercel (ej: `tu-app.vercel.app`)
+
+### 4. Sube a GitHub
 
 ```bash
 git init
@@ -44,21 +52,21 @@ git remote add origin https://github.com/TU_USUARIO/resale-tracker.git
 git push -u origin main
 ```
 
-### 4. Despliega en Vercel (gratis)
+### 5. Despliega en Vercel (gratis)
 
 1. Ve a vercel.com y regístrate con GitHub
 2. "Add New Project" → selecciona resale-tracker
 3. Deploy → en 2 min tienes la URL
 
-### 5. Instala en el móvil
+### 6. Instala en el móvil
 
 1. Abre la URL de Vercel en el navegador del móvil
 2. Android: 3 puntos → "Añadir a pantalla de inicio"
 3. iPhone: Compartir → "Añadir a pantalla de inicio"
 
-### 6. Crea las cuentas
+### 7. Crea las cuentas
 
-Cada persona (tú, tu madre, tu padre) abre la app y le da a "Registrarme" con su email y contraseña. Todos veréis los mismos datos.
+Cada persona (tú, tu madre, tu padre) abre la app y entra con "Registrarme" (email/contraseña) o "Continuar con Google". Todos veréis los mismos datos.
 
 ---
 
