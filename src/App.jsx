@@ -397,9 +397,9 @@ function Tracker({user}) {
     </div>
 
     {/* Bottom Nav */}
-    <div style={{position:"fixed",bottom:0,left:0,right:0,background:"#0a0a0a",borderTop:"1px solid #1a1a1a",display:"flex",justifyContent:"space-around",alignItems:"center",paddingBottom:"env(safe-area-inset-bottom, 0px)",height:64,flexShrink:0,zIndex:100}}>
-      {tabList.map(t=><button key={t.id} onClick={()=>setTab(t.id)} style={{background:"transparent",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4,padding:"8px 20px",color:tab===t.id?"#0d3":"#555",transition:"color .2s"}}>
-        <span style={{fontSize:20}}>{t.icon}</span>
+    <div style={{position:"fixed",bottom:0,left:0,right:0,background:"#0a0a0a",borderTop:"1px solid #1a1a1a",display:"flex",justifyContent:"space-around",alignItems:"center",boxSizing:"border-box",paddingBottom:"env(safe-area-inset-bottom, 0px)",height:"calc(64px + env(safe-area-inset-bottom, 0px))",flexShrink:0,zIndex:100}}>
+      {tabList.map(t=><button key={t.id} onClick={()=>setTab(t.id)} style={{background:"transparent",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,padding:"8px 20px",color:tab===t.id?"#0d3":"#555",transition:"color .2s",lineHeight:1}}>
+        <span style={{fontSize:20,lineHeight:1,display:"block"}}>{t.icon}</span>
         <span style={{fontSize:9,fontWeight:700,letterSpacing:.5}}>{t.label}</span>
       </button>)}
     </div>
