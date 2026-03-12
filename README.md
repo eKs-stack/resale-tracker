@@ -12,7 +12,26 @@ Conectada a Firebase: login con email/contraseña o Google y datos compartidos e
 - Ventas en Wallapop / Vinted con tracking de quién vendió
 - Dashboard con beneficio, ROI, comparativa martes vs miércoles
 - Alertas de productos estancados (2, 4 y 6 semanas)
+- Internacionalización automática con `i18next` (español por defecto + inglés + búlgaro)
 - Se instala en el móvil como app nativa
+
+## Arquitectura
+
+La app está organizada por capas para facilitar mantenimiento y escalabilidad:
+
+- `src/features/*`: módulos funcionales (`auth`, `tracker`)
+- `src/components/ui/*`: componentes reutilizables de UI
+- `src/hooks/*`: hooks de estado y suscripciones
+- `src/constants/*`: constantes de dominio y estilos compartidos
+- `src/utils/*`: utilidades puras (formato, métricas, reglas de negocio)
+- `src/i18n/*`: configuración y recursos de traducción
+
+## Seguridad e Integridad
+
+- Dependencias auditadas con `npm audit` y sin vulnerabilidades conocidas.
+- Sanitización de entrada/salida en cliente para evitar datos corruptos desde formularios o Firestore.
+- Reglas de Firestore incluidas en `firestore.rules` con validación de esquema y tipos.
+- Configuración Firebase para reglas en `firebase.json`.
 
 ---
 
