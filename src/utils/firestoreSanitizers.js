@@ -16,6 +16,8 @@ const pickAllowed = (value, allowedValues, fallback) =>
   allowedValues.includes(value) ? value : fallback;
 
 export const sanitizePackageDoc = (raw, id) => {
+  const nowDate = nowInputDate();
+
   return {
     id,
     date: sanitizeDateInput(raw?.date, nowDate),
