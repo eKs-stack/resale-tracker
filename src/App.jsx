@@ -14,7 +14,7 @@ import { collection, doc, onSnapshot, setDoc, deleteDoc, updateDoc, writeBatch }
 
 const PLATFORMS = ["Wallapop", "Vinted"];
 const PRODUCT_STATUS = ["Pendiente", "En venta", "Vendido", "Descartado", "Me lo quedo"];
-const CATEGORIES = ["Electrónica", "Ropa", "Hogar", "Juguetes", "Belleza", "Deporte", "Libros/Media", "Accesorios", "Otro"];
+const CATEGORIES = ["Electrónica", "Ropa", "Hogar", "Juguetes", "Belleza", "Deporte", "Libros/Media", "Accesorios", "Otros"];
 const generateId = () => Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
 const formatDate = (d) => { if (!d) return ""; return new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short" }); };
 const formatCurrency = (n) => n.toFixed(2) + "€";
