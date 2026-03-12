@@ -20,6 +20,28 @@ const formatDate = (d) => { if (!d) return ""; return new Date(d).toLocaleDateSt
 const formatCurrency = (n) => n.toFixed(2) + "€";
 const dayOfWeek = (dateStr) => new Date(dateStr).getDay();
 const getDayLabel = (dateStr) => { const day = dayOfWeek(dateStr); if (day === 2) return "Martes"; if (day === 3) return "Miércoles"; return new Date(dateStr).toLocaleDateString("es-ES", { weekday: "long" }); };
+const parseDateValue = (value) => {
+  if (!value) return null;
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [y, m, d] = value.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+const getMonthKey = (value) => {
+  const d = parseDateValue(value); if (!d) return null;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+};
+const getYearKey = (value) => {
+  const d = parseDateValue(value); if (!d) return null;
+  return String(d.getFullYear());
+};
+const formatMonthKey = (key) => {
+  if (!key) return "";
+  const [year, month] = key.split("-").map(Number);
+  return new Date(year, month - 1, 1).toLocaleDateString("es-ES", { month: "short", year: "numeric" });
+};
 
 const ALERT_LEVELS = [
   { days: 14, level: "warning", color: "#fd0", bg: "#1a1800", border: "#3a3200", icon: "⚠️", message: "Baja precio 20-30%" },
@@ -216,8 +238,10 @@ function Tracker({user}) {
   const [packages,setPackages]=useState([]);const [products,setProducts]=useState([]);
   const [tab,setTab]=useState("dashboard");const [showAddPkg,setShowAddPkg]=useState(false);
   const [showAddProd,setShowAddProd]=useState(false);const [showSell,setShowSell]=useState(null);
-  const [showPkgDetails,setShowPkgDetails]=useState(null);const [editProduct,setEditProduct]=useState(null);
+  const [showPkgDetails,setShowPkgDetails]=useState(null);const [editProduct,setEditProduct]=useState(null);const [editPackage,setEditPackage]=useState(null);
   const [productSearch,setProductSearch]=useState("");const [loading,setLoading]=useState(true);
+  const [selectionMode,setSelectionMode]=useState(false);const [selectedProductIds,setSelectedProductIds]=useState(new Set());
+  const [pkgSelectionMode,setPkgSelectionMode]=useState(false);const [selectedPackageIds,setSelectedPackageIds]=useState(new Set());
 
   const [pkgDate,setPkgDate]=useState(new Date().toISOString().split("T")[0]);
   const [pkgCost,setPkgCost]=useState("");const [pkgQty,setPkgQty]=useState("1");const [pkgNotes,setPkgNotes]=useState("");
@@ -233,6 +257,38 @@ function Tracker({user}) {
     const u2=onSnapshot(collection(db,"products"),s=>{setProducts(s.docs.map(d=>({id:d.id,...d.data()})));});
     return()=>{u1();u2();};
   },[]);
+  useEffect(()=>{
+    if(tab!=="products"&&selectionMode){setSelectionMode(false);setSelectedProductIds(new Set());}
+  },[tab,selectionMode]);
+  useEffect(()=>{
+    if(tab!=="packages"&&pkgSelectionMode){setPkgSelectionMode(false);setSelectedPackageIds(new Set());}
+  },[tab,pkgSelectionMode]);
+  useEffect(()=>{
+    if(selectedProductIds.size===0)return;
+    const validIds=new Set(products.map(p=>p.id));
+    setSelectedProductIds(prev=>{
+      let changed=false;
+      const next=new Set();
+      prev.forEach(id=>{
+        if(validIds.has(id))next.add(id);
+        else changed=true;
+      });
+      return changed?next:prev;
+    });
+  },[products,selectedProductIds.size]);
+  useEffect(()=>{
+    if(selectedPackageIds.size===0)return;
+    const validIds=new Set(packages.map(p=>p.id));
+    setSelectedPackageIds(prev=>{
+      let changed=false;
+      const next=new Set();
+      prev.forEach(id=>{
+        if(validIds.has(id))next.add(id);
+        else changed=true;
+      });
+      return changed?next:prev;
+    });
+  },[packages,selectedPackageIds.size]);
 
   const getPkg=(id)=>packages.find(p=>p.id===id);
   const sortedPackages=useMemo(()=>[...packages].sort((a,b)=>b.date.localeCompare(a.date)),[packages]);
@@ -251,25 +307,84 @@ function Tracker({user}) {
     const totalCost=packages.reduce((s,p)=>s+p.cost,0);
     const totalRev=products.reduce((s,p)=>s+getProductRevenue(p),0);
     const soldUnits=products.reduce((s,p)=>s+getSoldQuantity(p),0);
+    const totalUnits=products.reduce((s,p)=>s+getProductQuantity(p),0);
+    const availableUnits=products.reduce((s,p)=>s+getAvailableQuantity(p),0);
     const pendingCount=products
       .filter(p=>!["Vendido","Descartado","Me lo quedo"].includes(p.status))
       .reduce((s,p)=>s+getAvailableQuantity(p),0);
     const profit=totalRev-totalCost;
+    const sellThroughRate=totalUnits>0?(soldUnits/totalUnits)*100:0;
+    const marginRate=totalRev>0?(profit/totalRev)*100:0;
+    const recoveryRate=totalCost>0?(totalRev/totalCost)*100:0;
     const mar=packages.filter(p=>dayOfWeek(p.date)===2);const mie=packages.filter(p=>dayOfWeek(p.date)===3);
     const marIds=new Set(mar.map(p=>p.id));const mieIds=new Set(mie.map(p=>p.id));
     const marRev=products.filter(p=>marIds.has(p.packageId)).reduce((s,p)=>s+getProductRevenue(p),0);
     const marCost=mar.reduce((s,p)=>s+p.cost,0);
     const mieRev=products.filter(p=>mieIds.has(p.packageId)).reduce((s,p)=>s+getProductRevenue(p),0);
     const mieCost=mie.reduce((s,p)=>s+p.cost,0);
+    const activeProductsList=products.filter(p=>getAvailableQuantity(p)>0&&!["Descartado","Me lo quedo"].includes(p.status));
+    const activeProducts=activeProductsList.length;
+    const activeCapital=activeProductsList.reduce((s,p)=>s+getCostPerProduct(p,packages,products),0);
     const byCat={};products.forEach(p=>{const rev=getProductRevenue(p);if(rev<=0)return;if(!byCat[p.category])byCat[p.category]={revenue:0};byCat[p.category].revenue+=rev;});
     const catData=Object.entries(byCat).map(([l,v])=>({label:l,value:v.revenue})).sort((a,b)=>b.value-a.value);
     const byPlat={};products.forEach(p=>{const rev=getProductRevenue(p);if(rev<=0)return;const pl=p.soldPlatform||"Otro";if(!byPlat[pl])byPlat[pl]={revenue:0};byPlat[pl].revenue+=rev;});
     const platData=Object.entries(byPlat).map(([l,v])=>({label:l,value:v.revenue})).sort((a,b)=>b.value-a.value);
+    const now=new Date();
+    const currentMonthKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+    const currentYearKey=String(now.getFullYear());
+    const soldProducts=products.filter(p=>p.status==="Vendido"&&getProductRevenue(p)>0);
+    const soldProductsCount=soldProducts.length;
+    const avgUnitRevenue=soldUnits>0?totalRev/soldUnits:0;
+    const avgProductRevenue=soldProductsCount>0?totalRev/soldProductsCount:0;
+    const estimatedOpenRevenue=activeProductsList.reduce((s,p)=>{
+      const est=Number(p.estPrice)||0;
+      if(est<=0)return s;
+      return s+(est*getAvailableQuantity(p));
+    },0);
+    const estimatedOpenProfit=estimatedOpenRevenue-activeCapital;
+    const monthSales=soldProducts.filter(p=>getMonthKey(p.soldDate||p.createdAt)===currentMonthKey);
+    const yearSales=soldProducts.filter(p=>getYearKey(p.soldDate||p.createdAt)===currentYearKey);
+    const monthRevenue=monthSales.reduce((s,p)=>s+getProductRevenue(p),0);
+    const yearRevenue=yearSales.reduce((s,p)=>s+getProductRevenue(p),0);
+    const monthSoldUnits=monthSales.reduce((s,p)=>s+getSoldQuantity(p),0);
+    const yearSoldUnits=yearSales.reduce((s,p)=>s+getSoldQuantity(p),0);
+    const monthCost=packages.filter(p=>getMonthKey(p.date)===currentMonthKey).reduce((s,p)=>s+p.cost,0);
+    const yearCost=packages.filter(p=>getYearKey(p.date)===currentYearKey).reduce((s,p)=>s+p.cost,0);
+    const monthProfit=monthRevenue-monthCost;
+    const yearProfit=yearRevenue-yearCost;
+    const monthMap={};
+    const yearMap={};
+    packages.forEach(pkg=>{
+      const monthKey=getMonthKey(pkg.date);const yearKey=getYearKey(pkg.date);
+      if(monthKey){if(!monthMap[monthKey])monthMap[monthKey]={cost:0,revenue:0};monthMap[monthKey].cost+=Number(pkg.cost)||0;}
+      if(yearKey){if(!yearMap[yearKey])yearMap[yearKey]={cost:0,revenue:0};yearMap[yearKey].cost+=Number(pkg.cost)||0;}
+    });
+    soldProducts.forEach(prod=>{
+      const sourceDate=prod.soldDate||prod.createdAt;
+      const monthKey=getMonthKey(sourceDate);const yearKey=getYearKey(sourceDate);const rev=getProductRevenue(prod);
+      if(monthKey){if(!monthMap[monthKey])monthMap[monthKey]={cost:0,revenue:0};monthMap[monthKey].revenue+=rev;}
+      if(yearKey){if(!yearMap[yearKey])yearMap[yearKey]={cost:0,revenue:0};yearMap[yearKey].revenue+=rev;}
+    });
+    const monthBreakdown=Object.entries(monthMap)
+      .map(([key,val])=>({key,label:formatMonthKey(key),cost:val.cost,revenue:val.revenue,profit:val.revenue-val.cost}))
+      .sort((a,b)=>a.key.localeCompare(b.key));
+    const yearBreakdown=Object.entries(yearMap)
+      .map(([key,val])=>({key,label:key,cost:val.cost,revenue:val.revenue,profit:val.revenue-val.cost}))
+      .sort((a,b)=>a.key.localeCompare(b.key));
     return{totalCost,totalRev,profit,roi:totalCost>0?((profit/totalCost)*100).toFixed(0):0,
-      totalPkgs:packages.length,soldCount:soldUnits,pendingCount,
+      totalPkgs:packages.length,soldCount:soldUnits,pendingCount,totalUnits,availableUnits,
+      sellThroughRate,marginRate,recoveryRate,activeProducts,activeCapital,soldProductsCount,
+      avgUnitRevenue,avgProductRevenue,estimatedOpenRevenue,estimatedOpenProfit,
       avgPerPkg:packages.length?totalRev/packages.length:0,
       martes:{cost:marCost,revenue:marRev,profit:marRev-marCost,count:mar.length},
-      miercoles:{cost:mieCost,revenue:mieRev,profit:mieRev-mieCost,count:mie.length},catData,platData};
+      miercoles:{cost:mieCost,revenue:mieRev,profit:mieRev-mieCost,count:mie.length},
+      month:{cost:monthCost,revenue:monthRevenue,profit:monthProfit,soldUnits:monthSoldUnits},
+      year:{cost:yearCost,revenue:yearRevenue,profit:yearProfit,soldUnits:yearSoldUnits},
+      monthLabel:now.toLocaleDateString("es-ES",{month:"long"}),
+      yearLabel:currentYearKey,
+      monthBreakdown,
+      yearBreakdown,
+      catData,platData};
   },[packages,products]);
 
   const staleProds=useMemo(()=>products.map(p=>({...p,alert:getAlertLevel(p)})).filter(p=>p.alert&&getAvailableQuantity(p)>0).sort((a,b)=>b.alert.days-a.alert.days),[products]);
@@ -298,6 +413,14 @@ function Tracker({user}) {
       soldUnitPrice:getSoldUnitPrice(p)?String(getSoldUnitPrice(p)):"",
       soldPlatform:p.soldPlatform||"Wallapop",
       soldDate:p.soldDate||new Date().toISOString().split("T")[0]
+    });
+  };
+  const openEditPackage=(pkg)=>{
+    setEditPackage({
+      id:pkg.id,
+      date:pkg.date||new Date().toISOString().split("T")[0],
+      cost:pkg.cost?String(pkg.cost):"",
+      notes:pkg.notes||""
     });
   };
 
@@ -362,6 +485,39 @@ function Tracker({user}) {
     }
     setEditProduct(null);
   };
+  const saveEditedPackage=async()=>{
+    if(!editPackage||!editPackage.date)return;
+    const cost=Math.max(0,parseFloat(editPackage.cost)||0);
+    if(cost<=0)return;
+    await updateDoc(doc(db,"packages",editPackage.id),{
+      date:editPackage.date,
+      cost,
+      notes:editPackage.notes||"",
+      updatedAt:new Date().toISOString(),
+      updatedBy:user.displayName||user.email
+    });
+    setEditPackage(null);
+  };
+
+  const deletePackagesWithProducts=async(packageIds)=>{
+    if(!packageIds||packageIds.length===0)return;
+    let batch=writeBatch(db);let ops=0;
+    const commitIfNeeded=async(force=false)=>{
+      if(ops===0)return;
+      if(force||ops>=400){await batch.commit();batch=writeBatch(db);ops=0;}
+    };
+    for(const packageId of packageIds){
+      batch.delete(doc(db,"packages",packageId));ops+=1;
+      await commitIfNeeded();
+      const relatedProducts=products.filter(p=>p.packageId===packageId);
+      for(const product of relatedProducts){
+        batch.delete(doc(db,"products",product.id));ops+=1;
+        await commitIfNeeded();
+      }
+      if(showPkgDetails===packageId)setShowPkgDetails(null);
+    }
+    await commitIfNeeded(true);
+  };
 
   const sell=async()=>{
     if(!currentSellProduct||!sellPrice)return;
@@ -414,8 +570,41 @@ function Tracker({user}) {
     await batch.commit();
     setSellPrice("");setSellQty("1");setSellPlat("Wallapop");setSellDate(new Date().toISOString().split("T")[0]);setShowSell(null);
   };
+  const toggleProductSelection=(id)=>{
+    setSelectedProductIds(prev=>{
+      const next=new Set(prev);
+      if(next.has(id))next.delete(id);else next.add(id);
+      return next;
+    });
+  };
+  const clearBatchSelection=()=>{setSelectedProductIds(new Set());setSelectionMode(false);};
+  const deleteSelectedProducts=async()=>{
+    if(selectedProductIds.size===0)return;
+    if(!confirm(`¿Eliminar ${selectedProductIds.size} producto(s)?`))return;
+    const ids=[...selectedProductIds];
+    for(let i=0;i<ids.length;i+=400){
+      const batch=writeBatch(db);
+      ids.slice(i,i+400).forEach(id=>batch.delete(doc(db,"products",id)));
+      await batch.commit();
+    }
+    clearBatchSelection();
+  };
+  const togglePackageSelection=(id)=>{
+    setSelectedPackageIds(prev=>{
+      const next=new Set(prev);
+      if(next.has(id))next.delete(id);else next.add(id);
+      return next;
+    });
+  };
+  const clearPackageBatchSelection=()=>{setSelectedPackageIds(new Set());setPkgSelectionMode(false);};
+  const deleteSelectedPackages=async()=>{
+    if(selectedPackageIds.size===0)return;
+    if(!confirm(`¿Eliminar ${selectedPackageIds.size} paquete(s) y todos sus productos?`))return;
+    await deletePackagesWithProducts([...selectedPackageIds]);
+    clearPackageBatchSelection();
+  };
 
-  const delPkg=async(id)=>{await deleteDoc(doc(db,"packages",id));const ps=products.filter(p=>p.packageId===id);for(const p of ps)await deleteDoc(doc(db,"products",p.id));};
+  const delPkg=async(id)=>{await deletePackagesWithProducts([id]);};
   const delProd=async(id)=>{await deleteDoc(doc(db,"products",id));};
   const sugCost=useMemo(()=>{if(pkgCost)return null;const d=dayOfWeek(pkgDate);return d===2?6:d===3?3:null;},[pkgDate,pkgCost]);
   const pkgQtyNum=Math.max(1,Math.min(200,parseInt(pkgQty,10)||1));
@@ -430,8 +619,20 @@ function Tracker({user}) {
   const renderProductCard=(p)=>{
     const pkg=getPkg(p.packageId);const al=getAlertLevel(p);const qty=getProductQuantity(p);
     const soldQty=getSoldQuantity(p);const availQty=getAvailableQuantity(p);const revenue=getProductRevenue(p);
+    const isSelected=selectedProductIds.has(p.id);
+    const cardBackground=isSelected?"#112417":(al?al.bg:"#111a26");
+    const cardBorder=isSelected?"#0d3":(al?al.border:"#1c2738");
     const sc={Pendiente:"yellow","En venta":"blue",Vendido:"green",Descartado:"red","Me lo quedo":"purple"};
-    return <div key={p.id} style={{background:al?al.bg:"#111a26",border:"1px solid "+(al?al.border:"#1c2738"),borderRadius:14,padding:"14px 16px"}}>
+    return <div
+      key={p.id}
+      onClick={selectionMode?()=>toggleProductSelection(p.id):undefined}
+      style={{
+        background:cardBackground,border:"1px solid "+cardBorder,borderRadius:14,padding:"14px 16px",
+        cursor:selectionMode?"pointer":"default",
+        boxShadow:isSelected?"0 0 0 1px rgba(0,221,51,.4) inset":"none",
+        transition:"background .15s ease, border-color .15s ease, box-shadow .15s ease"
+      }}
+    >
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6,gap:8}}>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontWeight:700,fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
@@ -440,7 +641,10 @@ function Tracker({user}) {
             {pkg&&<span> · {formatDate(pkg.date)}</span>}
           </div>
         </div>
-        <Badge color={sc[p.status]||"neutral"}>{p.status}</Badge>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          {selectionMode&&<span style={{fontSize:11,color:isSelected?"#0d3":"#7b8fa9",fontWeight:700}}>{isSelected?"✓":"○"}</span>}
+          <Badge color={sc[p.status]||"neutral"}>{p.status}</Badge>
+        </div>
       </div>
       {al&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
         <span style={{width:7,height:7,borderRadius:"50%",background:al.color,display:"inline-block",animation:al.level==="critical"?"pulse 1.5s infinite":"none"}}/>
@@ -453,9 +657,16 @@ function Tracker({user}) {
       </div>}
       {p.estPrice>0&&availQty>0&&<div style={{fontSize:10,color:"#95a8c0",marginBottom:6}}>Objetivo: {formatCurrency(p.estPrice)}/ud · quedan {availQty} uds</div>}
       <div style={{display:"flex",gap:6}}>
-        {availQty>0&&p.status!=="Descartado"&&p.status!=="Me lo quedo"&&<button onClick={()=>openSellModal(p.id)} style={{flex:1,background:"#0d3",color:"#000",border:"none",padding:10,borderRadius:8,fontWeight:800,fontSize:12,cursor:"pointer"}}>💰 Vender</button>}
-        <button onClick={()=>openEditProduct(p)} style={{background:"#1c2738",border:"none",color:"#08f",padding:"10px 12px",borderRadius:8,fontSize:13,cursor:"pointer"}} title="Editar">✏️</button>
-        <button onClick={()=>{if(confirm("¿Eliminar?"))delProd(p.id);}} style={{background:"#1c2738",border:"none",color:"#f43",padding:"10px 12px",borderRadius:8,fontSize:12,cursor:"pointer"}}>🗑</button>
+        {selectionMode?
+          <button onClick={e=>{e.stopPropagation();toggleProductSelection(p.id);}} style={{flex:1,background:isSelected?"#0d3":"#1c2738",color:isSelected?"#001a00":"#c2d1e5",border:"none",padding:10,borderRadius:8,fontWeight:800,fontSize:12,cursor:"pointer"}}>
+            {isSelected?"Seleccionado":"Seleccionar"}
+          </button>:
+          <>
+            {availQty>0&&p.status!=="Descartado"&&p.status!=="Me lo quedo"&&<button onClick={e=>{e.stopPropagation();openSellModal(p.id);}} style={{flex:1,background:"#0d3",color:"#000",border:"none",padding:10,borderRadius:8,fontWeight:800,fontSize:12,cursor:"pointer"}}>💰 Vender</button>}
+            <button onClick={e=>{e.stopPropagation();openEditProduct(p);}} style={{background:"#1c2738",border:"none",color:"#08f",padding:"10px 12px",borderRadius:8,fontSize:13,cursor:"pointer"}} title="Editar">✏️</button>
+            <button onClick={e=>{e.stopPropagation();if(confirm("¿Eliminar?"))delProd(p.id);}} style={{background:"#1c2738",border:"none",color:"#f43",padding:"10px 12px",borderRadius:8,fontSize:12,cursor:"pointer"}}>🗑</button>
+          </>
+        }
       </div>
     </div>;
   };
@@ -479,82 +690,141 @@ function Tracker({user}) {
     {/* Content */}
     <div style={{flex:1,overflowY:"auto",overflowX:"hidden",padding:16,paddingBottom:"calc(96px + env(safe-area-inset-bottom, 0px))"}}>
 
-      {tab==="dashboard"&&<div style={{animation:"fadeIn .2s ease"}}>
-        <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:16}}>
-          <StatCard label="Invertido" value={formatCurrency(stats.totalCost)} sub={stats.totalPkgs+" paquetes"} accent="#f90"/>
-          <StatCard label="Facturado" value={formatCurrency(stats.totalRev)} sub={stats.soldCount+" uds vendidas"} accent="#08f"/>
-          <StatCard label="Beneficio" value={formatCurrency(stats.profit)} sub={"ROI: "+stats.roi+"%"} accent={stats.profit>=0?"#0d3":"#f43"}/>
-          <StatCard label="Pendientes" value={stats.pendingCount} sub="unidades por vender" accent="#a855f7"/>
-          {staleProds.length>0&&<StatCard label="Capital parado" value={formatCurrency(staleProds.reduce((s,p)=>s+getCostPerProduct(p,packages,products),0))} sub={staleProds.length+" estancado"+(staleProds.length!==1?"s":"")} accent="#f43"/>}
-        </div>
-
-        {staleProds.length>0&&<div style={{background:"#111a26",border:"1px solid #25354c",borderRadius:14,padding:16,marginBottom:16}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-            <div style={{fontSize:13,fontWeight:800}}>⏰ Productos estancados</div>
-            <div style={{fontSize:10,color:"#95a8c0"}}>
-              {staleProds.filter(p=>p.alert.level==="critical").length>0&&<span style={{color:"#f43"}}>🚨{staleProds.filter(p=>p.alert.level==="critical").length} </span>}
-              {staleProds.filter(p=>p.alert.level==="urgent").length>0&&<span style={{color:"#f90"}}>🔥{staleProds.filter(p=>p.alert.level==="urgent").length} </span>}
-              {staleProds.filter(p=>p.alert.level==="warning").length>0&&<span style={{color:"#fd0"}}>⚠️{staleProds.filter(p=>p.alert.level==="warning").length}</span>}
-            </div>
-          </div>
-          <div style={{display:"flex",flexDirection:"column",gap:6}}>
-            {staleProds.slice(0,5).map(p=>{const c=getCostPerProduct(p,packages,products);return<div key={p.id} style={{background:p.alert.bg,border:"1px solid "+p.alert.border,borderRadius:10,padding:"12px 14px"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontWeight:700,fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.alert.icon} {p.name}</div>
-                  <div style={{fontSize:10,color:"#b0c2d8",marginTop:3}}>{p.alert.daysSince}d · {p.alert.message}</div>
-                  <div style={{fontSize:10,color:"#95a8c0",marginTop:2}}>Coste estimado: {formatCurrency(c)}</div>
-                </div>
-                <button onClick={()=>openSellModal(p.id)} style={{background:p.alert.color,color:"#000",border:"none",padding:"8px 12px",borderRadius:8,fontWeight:800,fontSize:11,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>💰 Vender</button>
-              </div>
-            </div>;})}
-            {staleProds.length>5&&<button onClick={()=>setTab("products")} style={{background:"#1c2738",border:"none",color:"#c2d1e5",padding:10,borderRadius:8,fontSize:11,cursor:"pointer"}}>Ver {staleProds.length-5} más →</button>}
-          </div>
-        </div>}
-
-        <div style={{background:"#111a26",border:"1px solid #1c2738",borderRadius:14,padding:16,marginBottom:12}}>
-          <div style={{fontSize:11,color:"#95a8c0",textTransform:"uppercase",letterSpacing:1,marginBottom:12}}>🗓 Martes vs Miércoles</div>
-          <div style={{display:"flex",gap:10}}>
-            {[{l:"MAR (6€)",d:stats.martes},{l:"MIÉ (3€)",d:stats.miercoles}].map(x=><div key={x.l} style={{flex:1,background:"#0d1420",borderRadius:10,padding:14}}>
-              <div style={{fontSize:10,color:"#b0c2d8",marginBottom:2}}>{x.l}</div>
-              <div style={{fontSize:10,color:"#7b8fa9"}}>{x.d.count} paquetes</div>
-              <div style={{fontSize:20,fontWeight:800,color:x.d.profit>=0?"#0d3":"#f43",marginTop:6}}>{formatCurrency(x.d.profit)}</div>
-              <div style={{fontSize:9,color:"#7b8fa9"}}>{x.d.count>0?formatCurrency(x.d.profit/x.d.count)+"/paq":"—"}</div>
-            </div>)}
-          </div>
-        </div>
-
-        <div style={{display:"flex",flexDirection:"column",gap:12}}>
-          {stats.catData.length>0&&<div style={{background:"#111a26",border:"1px solid #1c2738",borderRadius:14,padding:16}}>
-            <div style={{fontSize:11,color:"#95a8c0",textTransform:"uppercase",letterSpacing:1,marginBottom:12}}>🏷 Top Categorías</div>
-            <MiniBar data={stats.catData.slice(0,5)} color="#08f"/>
-          </div>}
-          {stats.platData.length>0&&<div style={{background:"#111a26",border:"1px solid #1c2738",borderRadius:14,padding:16}}>
-            <div style={{fontSize:11,color:"#95a8c0",textTransform:"uppercase",letterSpacing:1,marginBottom:12}}>📱 Por Plataforma</div>
-            <MiniBar data={stats.platData} color="#a855f7"/>
-          </div>}
-          {packages.length>0&&<div style={{background:"#111a26",border:"1px solid #1c2738",borderRadius:14,padding:16}}>
-            <div style={{fontSize:11,color:"#95a8c0",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>📊 Media por Paquete</div>
-            <div style={{fontSize:28,fontWeight:800,color:"#0d3"}}>{formatCurrency(stats.avgPerPkg)}</div>
-            <div style={{fontSize:10,color:"#7b8fa9",marginTop:2}}>{(products.length/packages.length).toFixed(1)} productos/paquete</div>
-          </div>}
-        </div>
+      {tab==="dashboard"&&<div style={{animation:"fadeIn .2s ease",display:"flex",flexDirection:"column",gap:12}}>
         {packages.length===0&&<div style={{textAlign:"center",padding:"30px 20px",marginTop:16}}>
           <div style={{fontSize:13,color:"#7b8fa9",marginBottom:14}}>¡Registra tu primer paquete!</div>
           <button onClick={()=>{setTab("packages");setTimeout(()=>setShowAddPkg(true),100);}} style={{...btnP,width:"auto",padding:"14px 28px"}}>+ Añadir Paquete</button>
         </div>}
+
+        {packages.length>0&&<>
+          <div style={{background:"#111a26",border:"1px solid #1c2738",borderRadius:14,padding:14}}>
+            <div style={{fontSize:11,color:"#95a8c0",textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>📌 Resumen General</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+              <StatCard label="Beneficio neto" value={formatCurrency(stats.profit)} sub={`${formatCurrency(stats.totalRev)} facturado · ${formatCurrency(stats.totalCost)} invertido`} accent={stats.profit>=0?"#0d3":"#f43"}/>
+              <StatCard label="ROI y margen" value={`${stats.roi}%`} sub={`${stats.marginRate.toFixed(0)}% margen · ${stats.recoveryRate.toFixed(0)}% recuperado`} accent={stats.profit>=0?"#0d3":"#f43"}/>
+              <StatCard label="Capital activo" value={formatCurrency(stats.activeCapital)} sub={`${stats.activeProducts} productos activos · ${stats.availableUnits} uds`} accent="#f90"/>
+              <StatCard label="Rotación" value={`${stats.sellThroughRate.toFixed(0)}%`} sub={`${stats.soldCount}/${stats.totalUnits} uds vendidas`} accent="#08f"/>
+            </div>
+          </div>
+
+          <div style={{background:"#111a26",border:"1px solid #1c2738",borderRadius:14,padding:14}}>
+            <div style={{fontSize:11,color:"#95a8c0",textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>📅 Periodo Actual</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:10}}>
+              <StatCard
+                label={`Mes (${stats.monthLabel})`}
+                value={formatCurrency(stats.month.profit)}
+                sub={`${formatCurrency(stats.month.revenue)} / ${formatCurrency(stats.month.cost)} · ${stats.month.soldUnits} uds`}
+                accent={stats.month.profit>=0?"#0d3":"#f43"}
+              />
+              <StatCard
+                label={`Año (${stats.yearLabel})`}
+                value={formatCurrency(stats.year.profit)}
+                sub={`${formatCurrency(stats.year.revenue)} / ${formatCurrency(stats.year.cost)} · ${stats.year.soldUnits} uds`}
+                accent={stats.year.profit>=0?"#0d3":"#f43"}
+              />
+            </div>
+            {stats.monthBreakdown.length>0&&<div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {stats.monthBreakdown.slice(-6).reverse().map(row=><div key={row.key} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,background:"#0d1420",borderRadius:8,padding:"9px 10px"}}>
+                <div style={{fontSize:11,color:"#c2d1e5"}}>{row.label}</div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:12,fontWeight:800,color:row.profit>=0?"#0d3":"#f43"}}>{formatCurrency(row.profit)}</div>
+                  <div style={{fontSize:9,color:"#7b8fa9"}}>{formatCurrency(row.revenue)} / {formatCurrency(row.cost)}</div>
+                </div>
+              </div>)}
+            </div>}
+          </div>
+
+          <div style={{background:"#111a26",border:"1px solid #1c2738",borderRadius:14,padding:14}}>
+            <div style={{fontSize:11,color:"#95a8c0",textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>📦 Inventario y Riesgo</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:10}}>
+              <StatCard label="Pendientes" value={stats.pendingCount} sub="unidades por vender" accent="#a855f7"/>
+              <StatCard label="Ticket medio / ud" value={formatCurrency(stats.avgUnitRevenue)} sub={`${stats.soldCount} uds vendidas`} accent="#08f"/>
+              <StatCard label="Ticket medio / venta" value={formatCurrency(stats.avgProductRevenue)} sub={`${stats.soldProductsCount} productos vendidos`} accent="#0d3"/>
+              <StatCard label="Potencial stock" value={formatCurrency(stats.estimatedOpenRevenue)} sub={stats.estimatedOpenRevenue>0?`Estimado: ${(stats.estimatedOpenProfit>=0?"+":"")+formatCurrency(stats.estimatedOpenProfit)}`:"Añade precios objetivo para ver potencial"} accent={stats.estimatedOpenProfit>=0?"#0d3":"#f90"}/>
+            </div>
+            {staleProds.length===0?<div style={{fontSize:11,color:"#7b8fa9",padding:"6px 2px"}}>Sin productos estancados ahora mismo.</div>:
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              <div style={{fontSize:10,color:"#95a8c0",marginBottom:2}}>
+                {staleProds.filter(p=>p.alert.level==="critical").length>0&&<span style={{color:"#f43"}}>🚨 {staleProds.filter(p=>p.alert.level==="critical").length} crítico(s) </span>}
+                {staleProds.filter(p=>p.alert.level==="urgent").length>0&&<span style={{color:"#f90"}}>🔥 {staleProds.filter(p=>p.alert.level==="urgent").length} urgente(s) </span>}
+                {staleProds.filter(p=>p.alert.level==="warning").length>0&&<span style={{color:"#fd0"}}>⚠️ {staleProds.filter(p=>p.alert.level==="warning").length} aviso(s)</span>}
+              </div>
+              {staleProds.slice(0,4).map(p=>{const c=getCostPerProduct(p,packages,products);return<div key={p.id} style={{background:p.alert.bg,border:"1px solid "+p.alert.border,borderRadius:10,padding:"11px 12px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:700,fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.alert.icon} {p.name}</div>
+                    <div style={{fontSize:10,color:"#b0c2d8",marginTop:3}}>{p.alert.daysSince}d · {p.alert.message}</div>
+                    <div style={{fontSize:10,color:"#95a8c0",marginTop:2}}>Coste estimado: {formatCurrency(c)}</div>
+                  </div>
+                  <button onClick={()=>openSellModal(p.id)} style={{background:p.alert.color,color:"#000",border:"none",padding:"8px 10px",borderRadius:8,fontWeight:800,fontSize:11,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>💰 Vender</button>
+                </div>
+              </div>;})}
+              {staleProds.length>4&&<button onClick={()=>setTab("products")} style={{background:"#1c2738",border:"none",color:"#c2d1e5",padding:10,borderRadius:8,fontSize:11,cursor:"pointer"}}>Ver {staleProds.length-4} más →</button>}
+            </div>}
+          </div>
+
+          <div style={{background:"#111a26",border:"1px solid #1c2738",borderRadius:14,padding:14}}>
+            <div style={{fontSize:11,color:"#95a8c0",textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>📈 Canales y Eficiencia</div>
+            <div style={{display:"flex",gap:10,marginBottom:12}}>
+              {[{l:"MAR (6€)",d:stats.martes},{l:"MIÉ (3€)",d:stats.miercoles}].map(x=><div key={x.l} style={{flex:1,background:"#0d1420",borderRadius:10,padding:12}}>
+                <div style={{fontSize:10,color:"#b0c2d8",marginBottom:2}}>{x.l}</div>
+                <div style={{fontSize:10,color:"#7b8fa9"}}>{x.d.count} paquetes</div>
+                <div style={{fontSize:19,fontWeight:800,color:x.d.profit>=0?"#0d3":"#f43",marginTop:6}}>{formatCurrency(x.d.profit)}</div>
+                <div style={{fontSize:9,color:"#7b8fa9"}}>{x.d.count>0?formatCurrency(x.d.profit/x.d.count)+"/paq":"—"}</div>
+              </div>)}
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {stats.catData.length>0&&<div>
+                <div style={{fontSize:10,color:"#95a8c0",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Top categorías</div>
+                <MiniBar data={stats.catData.slice(0,5)} color="#08f"/>
+              </div>}
+              {stats.platData.length>0&&<div>
+                <div style={{fontSize:10,color:"#95a8c0",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Ingresos por plataforma</div>
+                <MiniBar data={stats.platData} color="#a855f7"/>
+              </div>}
+            </div>
+          </div>
+        </>}
       </div>}
 
       {tab==="packages"&&<div style={{animation:"fadeIn .2s ease"}}>
         {packages.length===0?<EmptyState icon="📦" msg="No hay paquetes registrados"/>:
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8,alignItems:"center",marginBottom:4}}>
+            <button
+              onClick={()=>pkgSelectionMode?clearPackageBatchSelection():setPkgSelectionMode(true)}
+              style={{background:pkgSelectionMode?"#f43":"#1c2738",border:"none",color:pkgSelectionMode?"#fff":"#c2d1e5",padding:"10px 12px",borderRadius:8,fontWeight:700,fontSize:11,cursor:"pointer"}}
+            >
+              {pkgSelectionMode?"Cancelar selección":"Seleccionar en lote"}
+            </button>
+            {pkgSelectionMode&&selectedPackageIds.size>0&&<button
+              onClick={deleteSelectedPackages}
+              style={{background:"#f43",border:"none",color:"#fff",padding:"10px 12px",borderRadius:8,fontWeight:800,fontSize:11,cursor:"pointer"}}
+            >
+              🗑 Borrar ({selectedPackageIds.size})
+            </button>}
+            {pkgSelectionMode&&<div style={{fontSize:10,color:"#95a8c0",marginLeft:"auto"}}>{selectedPackageIds.size} seleccionado(s)</div>}
+          </div>
           {sortedPackages.map(pkg=>{
             const pp=products.filter(p=>p.packageId===pkg.id);const soldUnits=pp.reduce((s,p)=>s+getSoldQuantity(p),0);
             const totalUnits=pp.reduce((s,p)=>s+getProductQuantity(p),0);const rev=pp.reduce((s,p)=>s+getProductRevenue(p),0);
             const prof=rev-pkg.cost;
-            return<div key={pkg.id} style={{background:"#111a26",border:"1px solid #1c2738",borderRadius:14,padding:"14px 16px"}}>
+            const isSelected=selectedPackageIds.has(pkg.id);
+            return<div
+              key={pkg.id}
+              onClick={pkgSelectionMode?()=>togglePackageSelection(pkg.id):undefined}
+              style={{
+                background:isSelected?"#112417":"#111a26",
+                border:"1px solid "+(isSelected?"#0d3":"#1c2738"),
+                borderRadius:14,padding:"14px 16px",
+                cursor:pkgSelectionMode?"pointer":"default",
+                boxShadow:isSelected?"0 0 0 1px rgba(0,221,51,.4) inset":"none",
+                transition:"background .15s ease, border-color .15s ease, box-shadow .15s ease"
+              }}
+            >
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,gap:10}}>
                 <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  {pkgSelectionMode&&<span style={{fontSize:11,color:isSelected?"#0d3":"#7b8fa9",fontWeight:700}}>{isSelected?"✓":"○"}</span>}
                   <div><div style={{fontWeight:700,fontSize:14}}>{formatDate(pkg.date)}</div></div>
                   <Badge color={pkg.cost<=3?"green":"orange"}>{formatCurrency(pkg.cost)}</Badge>
                 </div>
@@ -564,17 +834,43 @@ function Tracker({user}) {
                 </div>
               </div>
               <div style={{display:"flex",gap:8,marginTop:6}}>
-                <button onClick={()=>setShowPkgDetails(pkg.id)} style={{flex:1,background:"#1c2738",border:"none",color:"#08f",padding:10,borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer"}}>Ver productos</button>
-                <button onClick={()=>{setProdPkgId(pkg.id);setShowAddProd(true);}} style={{background:"#1c2738",border:"none",color:"#0d3",padding:"10px 14px",borderRadius:8,fontSize:12,cursor:"pointer"}}>+ Producto</button>
-                <button onClick={()=>{if(confirm("¿Borrar paquete y sus productos?"))delPkg(pkg.id);}} style={{background:"#1c2738",border:"none",color:"#f43",padding:"10px 14px",borderRadius:8,fontSize:12,cursor:"pointer"}}>🗑</button>
+                {pkgSelectionMode?
+                  <button onClick={e=>{e.stopPropagation();togglePackageSelection(pkg.id);}} style={{flex:1,background:isSelected?"#0d3":"#1c2738",color:isSelected?"#001a00":"#c2d1e5",border:"none",padding:10,borderRadius:8,fontWeight:800,fontSize:12,cursor:"pointer"}}>
+                    {isSelected?"Seleccionado":"Seleccionar"}
+                  </button>:
+                  <>
+                    <button onClick={e=>{e.stopPropagation();setShowPkgDetails(pkg.id);}} style={{flex:1,background:"#1c2738",border:"none",color:"#08f",padding:10,borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer"}}>Ver productos</button>
+                    <button onClick={e=>{e.stopPropagation();setProdPkgId(pkg.id);setShowAddProd(true);}} style={{background:"#1c2738",border:"none",color:"#0d3",padding:"10px 14px",borderRadius:8,fontSize:12,cursor:"pointer"}}>+ Producto</button>
+                    <button onClick={e=>{e.stopPropagation();openEditPackage(pkg);}} style={{background:"#1c2738",border:"none",color:"#08f",padding:"10px 14px",borderRadius:8,fontSize:12,cursor:"pointer"}}>✏️</button>
+                    <button onClick={e=>{e.stopPropagation();if(confirm("¿Borrar paquete y sus productos?"))delPkg(pkg.id);}} style={{background:"#1c2738",border:"none",color:"#f43",padding:"10px 14px",borderRadius:8,fontSize:12,cursor:"pointer"}}>🗑</button>
+                  </>
+                }
               </div>
             </div>;})}
         </div>}
       </div>}
 
       {tab==="products"&&<div style={{animation:"fadeIn .2s ease"}}>
-        <div style={{marginBottom:12}}>
+        <div style={{marginBottom:10}}>
           <input placeholder="Buscar producto, categoría o notas..." value={productSearch} onChange={e=>setProductSearch(e.target.value)} style={{...inputS,padding:"12px 14px"}}/>
+        </div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:8,alignItems:"center",marginBottom:12}}>
+          <button
+            onClick={()=>selectionMode?clearBatchSelection():setSelectionMode(true)}
+            style={{background:selectionMode?"#f43":"#1c2738",border:"none",color:selectionMode?"#fff":"#c2d1e5",padding:"10px 12px",borderRadius:8,fontWeight:700,fontSize:11,cursor:"pointer"}}
+          >
+            {selectionMode?"Cancelar selección":"Seleccionar en lote"}
+          </button>
+          {selectionMode&&selectedProductIds.size>0&&<button
+            onClick={deleteSelectedProducts}
+            style={{background:"#f43",border:"none",color:"#fff",padding:"10px 12px",borderRadius:8,fontWeight:800,fontSize:11,cursor:"pointer"}}
+          >
+            🗑 Borrar ({selectedProductIds.size})
+          </button>}
+          {selectionMode&&<div style={{fontSize:10,color:"#95a8c0",marginLeft:"auto"}}>{selectedProductIds.size} seleccionado(s)</div>}
+        </div>
+        <div style={{background:"#101826",border:"1px solid #1f2b3d",borderRadius:10,padding:"8px 10px",marginBottom:12,fontSize:10,color:"#95a8c0"}}>
+          Colores por antigüedad: <span style={{color:"#fd0"}}>14d</span> · <span style={{color:"#f90"}}>28d</span> · <span style={{color:"#f43"}}>42d+</span>
         </div>
         {filteredProducts.length===0?<EmptyState icon="🔎" msg={products.length===0?"Añade productos desde cada paquete":"No hay resultados para tu búsqueda"}/>:
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
@@ -621,6 +917,14 @@ function Tracker({user}) {
       </div>
       <Field label="Notas (opcional)"><input placeholder="Paquete grande, pesado..." value={pkgNotes} onChange={e=>setPkgNotes(e.target.value)} style={inputS}/></Field>
       <button onClick={addPkg} style={btnP}>{pkgQtyNum>1?`Añadir ${pkgQtyNum} paquetes`:"Añadir Paquete"}</button>
+    </Modal>
+    <Modal open={!!editPackage} onClose={()=>setEditPackage(null)} title="Editar Paquete">
+      {editPackage&&<>
+        <Field label="Fecha de compra"><input type="date" value={editPackage.date} onChange={e=>setEditPackage(prev=>({...prev,date:e.target.value}))} style={inputS}/></Field>
+        <Field label="Coste por paquete (€)"><input type="number" step="0.5" min="0" value={editPackage.cost} onChange={e=>setEditPackage(prev=>({...prev,cost:e.target.value}))} style={inputS}/></Field>
+        <Field label="Notas (opcional)"><input value={editPackage.notes} onChange={e=>setEditPackage(prev=>({...prev,notes:e.target.value}))} style={inputS}/></Field>
+        <button onClick={saveEditedPackage} style={btnP}>Guardar Cambios</button>
+      </>}
     </Modal>
 
     <Modal open={showAddProd} onClose={()=>setShowAddProd(false)} title="Nuevo Producto">
