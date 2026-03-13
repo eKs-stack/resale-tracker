@@ -58,7 +58,7 @@ export const globalCSS = `@import url('https://fonts.googleapis.com/css2?family=
 }
 @supports not (height: 100dvh){:root{--app-height:100vh}}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body,#root{min-height:var(--app-height);width:100%;background:radial-gradient(120% 120% at 15% -10%,var(--bg-glow) 0%,var(--bg-root) 40%,var(--bg-depth) 100%);color:var(--text-primary);font-family:'JetBrains Mono',monospace;font-size:14px;overflow-x:hidden}
+html,body,#root{min-height:var(--app-height);width:100%;background:var(--bg-root);color:var(--text-primary);font-family:'JetBrains Mono',monospace;font-size:14px;overflow-x:hidden}
 body{overflow-y:auto;-webkit-overflow-scrolling:touch}
 #root{min-height:calc(var(--app-height) + 1px)}
 input,select,button{font-family:inherit}
