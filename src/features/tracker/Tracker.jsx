@@ -2203,7 +2203,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
           minHeight: "calc(64px + var(--safe-bottom))",
           paddingLeft: "var(--safe-left)",
           paddingRight: "var(--safe-right)",
-          zIndex: 20
+          zIndex: 120
         }}
       >
         {tabList.map((tabItem) => (
