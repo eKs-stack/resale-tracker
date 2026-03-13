@@ -1470,7 +1470,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
         style={{
           flex: 1,
           padding: 16,
-          paddingBottom: "calc(92px + var(--safe-bottom))"
+          paddingBottom: 20
         }}
       >
         {tab === "dashboard" && (
@@ -2188,10 +2188,9 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
 
       <div
         style={{
-          position: "fixed",
-          left: 0,
-          right: 0,
+          position: "sticky",
           bottom: 0,
+          marginTop: "auto",
           background: "var(--surface-0)",
           borderTop: "1px solid var(--border)",
           display: "flex",
@@ -2203,7 +2202,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
           minHeight: "calc(64px + var(--safe-bottom))",
           paddingLeft: "var(--safe-left)",
           paddingRight: "var(--safe-right)",
-          zIndex: 120
+          zIndex: 300
         }}
       >
         {tabList.map((tabItem) => (
