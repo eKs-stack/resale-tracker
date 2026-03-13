@@ -44,6 +44,7 @@ import {
 } from "../../utils/trackerUtils";
 import {
   sanitizeDateInput,
+  sanitizeImageDataUrl,
   sanitizeInteger,
   sanitizeNumber,
   sanitizeText
@@ -62,7 +63,70 @@ import StatCard from "../../components/ui/StatCard";
 import LoadingScreen from "../../components/ui/LoadingScreen";
 import { getAuthErrorMessage } from "../auth/authErrors";
 
-export default function Tracker({ user }) {
+const DEFAULT_THEME = "default";
+const VERCEL_DARK_THEME = "vercel-dark";
+const MAX_IMAGE_TARGET_BYTES = 450 * 1024;
+
+const readFileAsDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => reject(new Error("file-read-failed"));
+    reader.readAsDataURL(file);
+  });
+
+const loadImageFromDataUrl = (dataUrl) =>
+  new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("image-load-failed"));
+    image.src = dataUrl;
+  });
+
+const canvasToJpegBlob = (canvas, quality) =>
+  new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), "image/jpeg", quality);
+  });
+
+const blobToDataUrl = (blob) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => reject(new Error("blob-read-failed"));
+    reader.readAsDataURL(blob);
+  });
+
+const prepareProductImage = async (file) => {
+  const baseDataUrl = await readFileAsDataUrl(file);
+  if (!baseDataUrl) return "";
+
+  const image = await loadImageFromDataUrl(baseDataUrl);
+  const maxSide = 1200;
+  const scale = Math.min(1, maxSide / Math.max(image.width || 1, image.height || 1));
+  const width = Math.max(1, Math.round((image.width || 1) * scale));
+  const height = Math.max(1, Math.round((image.height || 1) * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return sanitizeImageDataUrl(baseDataUrl);
+
+  ctx.drawImage(image, 0, 0, width, height);
+
+  let quality = 0.84;
+  let blob = await canvasToJpegBlob(canvas, quality);
+
+  while (blob && blob.size > MAX_IMAGE_TARGET_BYTES && quality > 0.5) {
+    quality -= 0.08;
+    blob = await canvasToJpegBlob(canvas, quality);
+  }
+
+  if (!blob) return sanitizeImageDataUrl(baseDataUrl);
+  return sanitizeImageDataUrl(await blobToDataUrl(blob));
+};
+
+export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) {
   const { t, i18n } = useTranslation();
   const locale = i18n.resolvedLanguage || "es";
   const { packages, products, loading, error } = useTrackerCollections();
@@ -104,6 +168,9 @@ export default function Tracker({ user }) {
   const [prodQty, setProdQty] = useState("1");
   const [prodEst, setProdEst] = useState("");
   const [prodNotes, setProdNotes] = useState("");
+  const [prodImageDataUrl, setProdImageDataUrl] = useState("");
+
+  const [imagePreview, setImagePreview] = useState(null);
 
   const [sellPrice, setSellPrice] = useState("");
   const [sellQty, setSellQty] = useState("1");
@@ -120,11 +187,62 @@ export default function Tracker({ user }) {
   const categoryLabel = (value) => t(`categories.${getCategoryKey(value)}`);
   const conditionLabel = (value) => t(`conditions.${getConditionKey(value)}`);
   const platformLabel = (value) => t(`platforms.${getPlatformKey(value)}`);
+  const selectedTheme = theme === VERCEL_DARK_THEME ? VERCEL_DARK_THEME : DEFAULT_THEME;
   const actor = () => sanitizeText(user.displayName || user.email || "unknown", 120);
   const hasPasswordProvider = useMemo(
     () => (user?.providerData || []).some((provider) => provider.providerId === "password"),
     [user]
   );
+
+  const handleThemeSelection = (event) => {
+    if (!onThemeChange) return;
+    const nextTheme = event.target.value === VERCEL_DARK_THEME ? VERCEL_DARK_THEME : DEFAULT_THEME;
+    onThemeChange(nextTheme);
+  };
+
+  const openImagePreview = (src, name = "") => {
+    const safeSrc = sanitizeImageDataUrl(src);
+    if (!safeSrc) return;
+    setImagePreview({ src: safeSrc, name: sanitizeText(name, 160) });
+  };
+
+  const closeImagePreview = () => {
+    setImagePreview(null);
+  };
+
+  const applyImageFromFile = async (file, setter) => {
+    if (!file) return;
+    if (!file.type || !file.type.startsWith("image/")) {
+      alert(t("products.imageInvalidType"));
+      return;
+    }
+
+    try {
+      const safeDataUrl = sanitizeImageDataUrl(await prepareProductImage(file));
+      if (!safeDataUrl) {
+        alert(t("products.imageProcessError"));
+        return;
+      }
+
+      setter(safeDataUrl);
+    } catch {
+      alert(t("products.imageProcessError"));
+    }
+  };
+
+  const handleNewProductImage = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    await applyImageFromFile(file, setProdImageDataUrl);
+  };
+
+  const handleEditProductImage = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    await applyImageFromFile(file, (safeDataUrl) => {
+      setEditProduct((previous) => (previous ? { ...previous, imageDataUrl: safeDataUrl } : previous));
+    });
+  };
 
   useEffect(() => {
     if (tab !== "products" && selectionMode) {
@@ -323,6 +441,7 @@ export default function Tracker({ user }) {
       quantity: String(getProductQuantity(product)),
       estPrice: product.estPrice ? String(product.estPrice) : "",
       notes: product.notes || "",
+      imageDataUrl: product.imageDataUrl || "",
       status: PRODUCT_STATUS.includes(product.status) ? product.status : "Pendiente",
       soldQuantity: String(getSoldQuantity(product)),
       soldPrice: getProductRevenue(product) ? String(getProductRevenue(product)) : "",
@@ -534,6 +653,7 @@ export default function Tracker({ user }) {
       estPrice,
       status: "Pendiente",
       notes: sanitizeText(prodNotes, 1000),
+      imageDataUrl: sanitizeImageDataUrl(prodImageDataUrl),
       createdAt: new Date().toISOString(),
       soldQuantity: 0,
       soldPrice: 0,
@@ -554,6 +674,7 @@ export default function Tracker({ user }) {
     setProdQty("1");
     setProdEst("");
     setProdNotes("");
+    setProdImageDataUrl("");
     setShowAddProd(false);
   };
 
@@ -582,6 +703,7 @@ export default function Tracker({ user }) {
         fallback: 0
       }),
       notes: sanitizeText(editProduct.notes, 1000),
+      imageDataUrl: sanitizeImageDataUrl(editProduct.imageDataUrl),
       status,
       updatedAt: new Date().toISOString()
     };
@@ -735,6 +857,7 @@ export default function Tracker({ user }) {
       }),
       status: "Vendido",
       notes: sanitizeText(currentSellProduct.notes, 1000),
+      imageDataUrl: sanitizeImageDataUrl(currentSellProduct.imageDataUrl),
       createdAt: nowISO,
       soldQuantity: quantity,
       soldPrice: saleTotal,
@@ -980,6 +1103,39 @@ export default function Tracker({ user }) {
           </div>
         </div>
 
+        {product.imageDataUrl && (
+          <button
+            onClick={(event) => {
+              event.stopPropagation();
+              openImagePreview(product.imageDataUrl, product.name);
+            }}
+            style={{
+              width: "100%",
+              background: "transparent",
+              border: "none",
+              padding: 0,
+              marginBottom: 8,
+              cursor: "zoom-in"
+            }}
+            title={t("products.openImage")}
+          >
+            <img
+              src={product.imageDataUrl}
+              alt={t("products.imageAlt", { name: product.name })}
+              style={{
+                width: "100%",
+                maxHeight: 180,
+                borderRadius: 10,
+                objectFit: "cover",
+                border: "1px solid var(--border)"
+              }}
+            />
+            <div style={{ fontSize: 9, color: "var(--text-subtle)", marginTop: 4 }}>
+              {t("products.tapToZoom")}
+            </div>
+          </button>
+        )}
+
         {alert && (
           <div style={{ marginBottom: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -1149,7 +1305,8 @@ export default function Tracker({ user }) {
     return (
       <div
         style={{
-          height: "var(--app-height)",
+          position: "fixed",
+          inset: 0,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -1227,7 +1384,8 @@ export default function Tracker({ user }) {
   return (
     <div
       style={{
-        height: "var(--app-height)",
+        position: "fixed",
+        inset: 0,
         display: "flex",
         flexDirection: "column",
         overflow: "hidden"
@@ -2239,6 +2397,39 @@ export default function Tracker({ user }) {
               marginBottom: 10
             }}
           >
+            🎨 {t("settings.themeTitle")}
+          </div>
+
+          <Field label={t("settings.themeLabel")}>
+            <select value={selectedTheme} onChange={handleThemeSelection} style={selectS}>
+              <option value={DEFAULT_THEME}>{t("settings.themeClassic")}</option>
+              <option value={VERCEL_DARK_THEME}>{t("settings.themeVercelDark")}</option>
+            </select>
+          </Field>
+
+          <div style={{ fontSize: 11, color: "var(--text-subtle)", marginTop: 8 }}>
+            {t("settings.themeHint")}
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: "var(--surface-2)",
+            border: "1px solid var(--border)",
+            borderRadius: 12,
+            padding: 12,
+            marginBottom: 12
+          }}
+        >
+          <div
+            style={{
+              fontSize: 10,
+              color: "var(--text-muted)",
+              textTransform: "uppercase",
+              letterSpacing: 1,
+              marginBottom: 10
+            }}
+          >
             👤 {t("settings.profileTitle")}
           </div>
 
@@ -2614,6 +2805,74 @@ export default function Tracker({ user }) {
           </Field>
         </div>
 
+        <Field label={t("products.photoLabel")}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {prodImageDataUrl ? (
+              <button
+                onClick={() => openImagePreview(prodImageDataUrl, prodName)}
+                style={{
+                  width: "100%",
+                  background: "transparent",
+                  border: "none",
+                  padding: 0,
+                  cursor: "zoom-in"
+                }}
+                title={t("products.openImage")}
+              >
+                <img
+                  src={prodImageDataUrl}
+                  alt={t("products.imageAlt", { name: prodName || t("products.newProduct") })}
+                  style={{
+                    width: "100%",
+                    maxHeight: 210,
+                    borderRadius: 10,
+                    objectFit: "cover",
+                    border: "1px solid var(--border)"
+                  }}
+                />
+              </button>
+            ) : (
+              <div
+                style={{
+                  ...inputS,
+                  padding: "12px 14px",
+                  fontSize: 11,
+                  color: "var(--text-subtle)",
+                  textAlign: "center"
+                }}
+              >
+                {t("products.photoHint")}
+              </div>
+            )}
+
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handleNewProductImage}
+              style={{ ...inputS, padding: "10px 12px", fontSize: 13 }}
+            />
+
+            {prodImageDataUrl && (
+              <button
+                onClick={() => setProdImageDataUrl("")}
+                style={{
+                  background: "var(--border)",
+                  color: "var(--text-soft)",
+                  border: "none",
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  fontWeight: 700,
+                  fontSize: 11,
+                  cursor: "pointer"
+                }}
+              >
+                🗑 {t("products.removePhotoButton")}
+              </button>
+            )}
+          </div>
+        </Field>
+
         <Field label={t("common.notesOptional")}>
           <input
             placeholder={t("products.detailsPlaceholder")}
@@ -2670,6 +2929,32 @@ export default function Tracker({ user }) {
                   }}
                 >
                   <div style={{ fontWeight: 700, fontSize: 13 }}>{product.name}</div>
+                  {product.imageDataUrl && (
+                    <button
+                      onClick={() => openImagePreview(product.imageDataUrl, product.name)}
+                      style={{
+                        width: "100%",
+                        marginTop: 8,
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        cursor: "zoom-in"
+                      }}
+                      title={t("products.openImage")}
+                    >
+                      <img
+                        src={product.imageDataUrl}
+                        alt={t("products.imageAlt", { name: product.name })}
+                        style={{
+                          width: "100%",
+                          maxHeight: 170,
+                          borderRadius: 10,
+                          objectFit: "cover",
+                          border: "1px solid var(--border)"
+                        }}
+                      />
+                    </button>
+                  )}
                   {alert && (
                     <div style={{ fontSize: 10, color: alert.color, marginTop: 3, fontWeight: 700 }}>
                       {alert.icon} {alert.daysSince}d · {alert.message}
@@ -2922,6 +3207,76 @@ export default function Tracker({ user }) {
               </Field>
             </div>
 
+            <Field label={t("products.photoLabel")}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {editProduct.imageDataUrl ? (
+                  <button
+                    onClick={() => openImagePreview(editProduct.imageDataUrl, editProduct.name)}
+                    style={{
+                      width: "100%",
+                      background: "transparent",
+                      border: "none",
+                      padding: 0,
+                      cursor: "zoom-in"
+                    }}
+                    title={t("products.openImage")}
+                  >
+                    <img
+                      src={editProduct.imageDataUrl}
+                      alt={t("products.imageAlt", { name: editProduct.name })}
+                      style={{
+                        width: "100%",
+                        maxHeight: 210,
+                        borderRadius: 10,
+                        objectFit: "cover",
+                        border: "1px solid var(--border)"
+                      }}
+                    />
+                  </button>
+                ) : (
+                  <div
+                    style={{
+                      ...inputS,
+                      padding: "12px 14px",
+                      fontSize: 11,
+                      color: "var(--text-subtle)",
+                      textAlign: "center"
+                    }}
+                  >
+                    {t("products.photoHint")}
+                  </div>
+                )}
+
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleEditProductImage}
+                  style={{ ...inputS, padding: "10px 12px", fontSize: 13 }}
+                />
+
+                {editProduct.imageDataUrl && (
+                  <button
+                    onClick={() =>
+                      setEditProduct((previous) => (previous ? { ...previous, imageDataUrl: "" } : previous))
+                    }
+                    style={{
+                      background: "var(--border)",
+                      color: "var(--text-soft)",
+                      border: "none",
+                      padding: "10px 12px",
+                      borderRadius: 8,
+                      fontWeight: 700,
+                      fontSize: 11,
+                      cursor: "pointer"
+                    }}
+                  >
+                    🗑 {t("products.removePhotoButton")}
+                  </button>
+                )}
+              </div>
+            </Field>
+
             {editIsSold && (
               <>
                 <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 10 }}>
@@ -3003,6 +3358,67 @@ export default function Tracker({ user }) {
           </>
         )}
       </Modal>
+
+      {imagePreview && (
+        <div
+          onClick={closeImagePreview}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1200,
+            background: "rgba(6,6,8,0.88)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 920,
+              maxHeight: "95vh",
+              display: "flex",
+              flexDirection: "column",
+              gap: 10
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ color: "var(--text-soft)", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis" }}>
+                {imagePreview.name || t("products.imagePreviewTitle")}
+              </div>
+              <button
+                onClick={closeImagePreview}
+                style={{
+                  background: "var(--surface-1)",
+                  color: "var(--text-primary)",
+                  border: "1px solid var(--border)",
+                  padding: "7px 10px",
+                  borderRadius: 8,
+                  fontSize: 12,
+                  cursor: "pointer"
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <img
+              src={imagePreview.src}
+              alt={t("products.imageAlt", { name: imagePreview.name || t("products.imagePreviewTitle") })}
+              style={{
+                width: "100%",
+                maxHeight: "calc(95vh - 70px)",
+                objectFit: "contain",
+                borderRadius: 12,
+                border: "1px solid var(--border)",
+                background: "var(--surface-0)"
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -116,6 +116,11 @@ export const resources = {
         saveProfileButton: "Guardar usuario",
         saveEmailButton: "Guardar email",
         savePasswordButton: "Guardar contraseña",
+        themeTitle: "Tema",
+        themeLabel: "Paleta",
+        themeClassic: "Actual (original)",
+        themeVercelDark: "Simple dark (Vercel)",
+        themeHint: "Puedes cambiar entre el tema actual y un dark mode simple.",
         profileUpdated: "Perfil actualizado"
       },
       status: {
@@ -260,7 +265,16 @@ export const resources = {
         saleUnitPrice: "Precio venta/u (€)",
         saleTotal: "Total venta (€)",
         salePlatform: "Plataforma venta",
-        saleDate: "Fecha de venta"
+        saleDate: "Fecha de venta",
+        photoLabel: "Foto (opcional)",
+        photoHint: "Haz una foto o sube una imagen para este producto",
+        removePhotoButton: "Quitar foto",
+        openImage: "Ver imagen",
+        tapToZoom: "Toca para ampliar",
+        imageAlt: "Foto de {{name}}",
+        imagePreviewTitle: "Imagen del producto",
+        imageInvalidType: "Selecciona un archivo de imagen válido.",
+        imageProcessError: "No se pudo procesar la imagen. Prueba con otra foto."
       },
       sale: {
         registerSale: "Registrar venta",
@@ -396,6 +410,11 @@ export const resources = {
         saveProfileButton: "Save username",
         saveEmailButton: "Save email",
         savePasswordButton: "Save password",
+        themeTitle: "Theme",
+        themeLabel: "Palette",
+        themeClassic: "Current (original)",
+        themeVercelDark: "Simple dark (Vercel)",
+        themeHint: "Switch between your current palette and a simple dark mode.",
         profileUpdated: "Profile updated"
       },
       status: {
@@ -540,7 +559,16 @@ export const resources = {
         saleUnitPrice: "Sale price/unit (€)",
         saleTotal: "Sale total (€)",
         salePlatform: "Sale platform",
-        saleDate: "Sale date"
+        saleDate: "Sale date",
+        photoLabel: "Photo (optional)",
+        photoHint: "Take or upload a photo for this product",
+        removePhotoButton: "Remove photo",
+        openImage: "Open image",
+        tapToZoom: "Tap to zoom",
+        imageAlt: "Photo of {{name}}",
+        imagePreviewTitle: "Product image",
+        imageInvalidType: "Please select a valid image file.",
+        imageProcessError: "Image processing failed. Try a different photo."
       },
       sale: {
         registerSale: "Register sale",
@@ -676,6 +704,11 @@ export const resources = {
         saveProfileButton: "Запази потребител",
         saveEmailButton: "Запази имейл",
         savePasswordButton: "Запази парола",
+        themeTitle: "Тема",
+        themeLabel: "Палитра",
+        themeClassic: "Текуща (оригинал)",
+        themeVercelDark: "Семпла тъмна (Vercel)",
+        themeHint: "Можеш да превключваш между текущата тема и семпъл тъмен режим.",
         profileUpdated: "Профилът е обновен"
       },
       status: {
@@ -820,7 +853,16 @@ export const resources = {
         saleUnitPrice: "Продажна цена/бр. (€)",
         saleTotal: "Обща продажба (€)",
         salePlatform: "Платформа за продажба",
-        saleDate: "Дата на продажба"
+        saleDate: "Дата на продажба",
+        photoLabel: "Снимка (по избор)",
+        photoHint: "Направи или качи снимка за този продукт",
+        removePhotoButton: "Премахни снимката",
+        openImage: "Виж снимката",
+        tapToZoom: "Натисни за увеличение",
+        imageAlt: "Снимка на {{name}}",
+        imagePreviewTitle: "Снимка на продукта",
+        imageInvalidType: "Избери валиден файл със снимка.",
+        imageProcessError: "Снимката не можа да се обработи. Опитай с друга."
       },
       sale: {
         registerSale: "Регистрирай продажба",

@@ -11,11 +11,13 @@ export default function Modal({ open, onClose, title, children }) {
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(24,8,33,0.78)",
+        background: "var(--overlay-backdrop)",
         backdropFilter: "blur(8px)",
         display: "flex",
         alignItems: "flex-end",
         justifyContent: "center",
+        paddingLeft: "env(safe-area-inset-left, 0px)",
+        paddingRight: "env(safe-area-inset-right, 0px)",
         zIndex: 1000
       }}
     >
@@ -29,7 +31,9 @@ export default function Modal({ open, onClose, title, children }) {
           paddingBottom: "calc(24px + env(safe-area-inset-bottom, 0px))",
           width: "100%",
           maxWidth: 500,
+          minWidth: 0,
           maxHeight: "85vh",
+          overflowX: "hidden",
           overflowY: "auto",
           animation: "slideUp 0.25s ease-out"
         }}

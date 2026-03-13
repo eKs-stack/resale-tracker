@@ -45,3 +45,18 @@ export const sanitizeIsoDate = (value, fallback = null) => {
 
   return fallback;
 };
+
+export const sanitizeImageDataUrl = (
+  value,
+  { maxLength = 900000, fallback = "" } = {}
+) => {
+  if (typeof value !== "string") return fallback;
+
+  const safeValue = value.trim();
+  if (!safeValue) return fallback;
+  if (safeValue.length > maxLength) return fallback;
+  if (!safeValue.startsWith("data:image/")) return fallback;
+  if (!safeValue.includes(";base64,")) return fallback;
+
+  return safeValue;
+};

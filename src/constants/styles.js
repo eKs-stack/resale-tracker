@@ -3,6 +3,9 @@ export const globalCSS = `@import url('https://fonts.googleapis.com/css2?family=
 --app-height:100vh;
 --bg-root:#2a1b37;
 --bg-root-alt:#342145;
+--bg-glow:#5a3a6b;
+--bg-depth:#23142f;
+--overlay-backdrop:rgba(24,8,33,0.78);
 --surface-0:#3a2850;
 --surface-1:#452e5f;
 --surface-2:#51376c;
@@ -23,12 +26,39 @@ export const globalCSS = `@import url('https://fonts.googleapis.com/css2?family=
 --alert:#d59b69;
 --violet:#9f7fc2
 }
+:root[data-theme='vercel-dark']{
+--bg-root:#0b0b0d;
+--bg-root-alt:#101014;
+--bg-glow:#20202a;
+--bg-depth:#050506;
+--overlay-backdrop:rgba(5,6,8,0.72);
+--surface-0:#0f1012;
+--surface-1:#16171a;
+--surface-2:#1c1d21;
+--surface-3:#25262b;
+--border:#2d2e34;
+--border-strong:#3b3d45;
+--text-primary:#fafafa;
+--text-soft:#e5e7eb;
+--text-muted:#a1a1aa;
+--text-subtle:#71717a;
+--accent:#fafafa;
+--accent-strong:#ffffff;
+--accent-ink:#09090b;
+--danger:#ef4444;
+--danger-ink:#fee2e2;
+--info:#60a5fa;
+--warning:#f59e0b;
+--alert:#fb7185;
+--violet:#a78bfa
+}
 @supports (height: 100dvh){:root{--app-height:100dvh}}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body,#root{height:100%;width:100%;background:radial-gradient(120% 120% at 15% -10%,#5a3a6b 0%,var(--bg-root) 40%,#23142f 100%);color:var(--text-primary);font-family:'JetBrains Mono',monospace;font-size:14px;overflow:hidden}
+html,body,#root{height:100%;width:100%;background:radial-gradient(120% 120% at 15% -10%,var(--bg-glow) 0%,var(--bg-root) 40%,var(--bg-depth) 100%);color:var(--text-primary);font-family:'JetBrains Mono',monospace;font-size:14px;overflow:hidden;overscroll-behavior:none}
 input,select,button{font-family:inherit}
 input,select{color-scheme:dark}
-input[type="date"]{width:100%;max-width:100%;min-width:0;display:block}
+input[type="date"]{width:100%;max-width:100%;min-width:0;display:block;appearance:none;-webkit-appearance:none}
+input[type="date"]::-webkit-date-and-time-value{min-width:0}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 @keyframes slideUp{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}

@@ -1,6 +1,7 @@
 import { CATEGORIES, CONDITIONS, PLATFORMS, PRODUCT_STATUS } from "../constants/domain";
 import {
   sanitizeDateInput,
+  sanitizeImageDataUrl,
   sanitizeInteger,
   sanitizeIsoDate,
   sanitizeNumber,
@@ -89,6 +90,7 @@ export const sanitizeProductDoc = (raw, id) => {
     reviewedBy: sanitizeText(raw?.reviewedBy, 120),
     addedBy: sanitizeText(raw?.addedBy, 120),
     sourceProductId: sanitizeText(raw?.sourceProductId, 120),
+    imageDataUrl: sanitizeImageDataUrl(raw?.imageDataUrl),
     sales: Array.isArray(raw?.sales) ? raw.sales.slice(0, 200) : []
   };
 };
