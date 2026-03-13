@@ -7,6 +7,7 @@ export default function useTrackerCollections() {
   const [packages, setPackages] = useState([]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     let packagesLoaded = false;
@@ -18,6 +19,9 @@ export default function useTrackerCollections() {
       );
       packagesLoaded = true;
       if (packagesLoaded && productsLoaded) setLoading(false);
+    }, (err) => {
+      setError(err);
+      setLoading(false);
     });
 
     const stopProducts = onSnapshot(collection(db, "products"), (snapshot) => {
@@ -26,6 +30,9 @@ export default function useTrackerCollections() {
       );
       productsLoaded = true;
       if (packagesLoaded && productsLoaded) setLoading(false);
+    }, (err) => {
+      setError(err);
+      setLoading(false);
     });
 
     return () => {
@@ -34,5 +41,5 @@ export default function useTrackerCollections() {
     };
   }, []);
 
-  return { packages, products, loading };
+  return { packages, products, loading, error };
 }

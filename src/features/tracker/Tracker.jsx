@@ -53,7 +53,7 @@ import LoadingScreen from "../../components/ui/LoadingScreen";
 export default function Tracker({ user }) {
   const { t, i18n } = useTranslation();
   const locale = i18n.resolvedLanguage || "es";
-  const { packages, products, loading } = useTrackerCollections();
+  const { packages, products, loading, error } = useTrackerCollections();
 
   const [tab, setTab] = useState("dashboard");
   const [showAddPkg, setShowAddPkg] = useState(false);
@@ -882,6 +882,85 @@ export default function Tracker({ user }) {
   };
 
   if (loading) return <LoadingScreen />;
+
+  if (error) {
+    return (
+      <div
+        style={{
+          height: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 20
+        }}
+      >
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 420,
+            background: "#111a26",
+            border: "1px solid #2a3d58",
+            borderRadius: 14,
+            padding: 18
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <AppLogo size={36} fontSize={12} />
+            <div style={{ fontWeight: 800 }}>{t("common.dataLoadErrorTitle")}</div>
+          </div>
+          <div style={{ color: "#95a8c0", fontSize: 12, marginBottom: 14 }}>
+            {t("common.dataLoadErrorBody")}
+          </div>
+          <div
+            style={{
+              background: "#0d1420",
+              border: "1px solid #25354c",
+              borderRadius: 8,
+              color: "#b0c2d8",
+              padding: "9px 10px",
+              fontSize: 11,
+              marginBottom: 12,
+              wordBreak: "break-word"
+            }}
+          >
+            {error.code || error.message || "unknown_error"}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                flex: 1,
+                background: "#1c2738",
+                color: "#d5e1ef",
+                border: "none",
+                borderRadius: 8,
+                padding: "10px 12px",
+                cursor: "pointer",
+                fontWeight: 700
+              }}
+            >
+              {t("common.reload")}
+            </button>
+            <button
+              onClick={() => signOut(auth)}
+              style={{
+                flex: 1,
+                background: "#f43",
+                color: "#fff",
+                border: "none",
+                borderRadius: 8,
+                padding: "10px 12px",
+                cursor: "pointer",
+                fontWeight: 700
+              }}
+            >
+              {t("common.signOut")}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>

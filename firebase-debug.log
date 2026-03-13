@@ -1,0 +1,61 @@
+[debug] [2026-03-12T23:59:51.989Z] ----------------------------------------------------------------------
+[debug] [2026-03-12T23:59:51.991Z] Command:       /opt/homebrew/Cellar/node/24.10.0/bin/node /opt/homebrew/bin/firebase deploy --only firestore:rules --project resale-tracker-ef981
+[debug] [2026-03-12T23:59:51.991Z] CLI Version:   15.10.0
+[debug] [2026-03-12T23:59:51.991Z] Platform:      darwin
+[debug] [2026-03-12T23:59:51.991Z] Node Version:  v24.10.0
+[debug] [2026-03-12T23:59:51.991Z] Time:          Fri Mar 13 2026 00:59:51 GMT+0100 (Central European Standard Time)
+[debug] [2026-03-12T23:59:51.991Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-12T23:59:52.787Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-12T23:59:52.788Z] > authorizing via signed-in user (aleksdankovhristov@gmail.com)
+[debug] [2026-03-12T23:59:52.788Z] [iam] checking project resale-tracker-ef981 for permissions ["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]
+[debug] [2026-03-12T23:59:52.789Z] Checked if tokens are valid: true, expires at: 1773361880639
+[debug] [2026-03-12T23:59:52.789Z] Checked if tokens are valid: true, expires at: 1773361880639
+[debug] [2026-03-12T23:59:52.789Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/resale-tracker-ef981:testIamPermissions [none]
+[debug] [2026-03-12T23:59:52.790Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/resale-tracker-ef981:testIamPermissions  x-goog-user-project=resale-tracker-ef981
+[debug] [2026-03-12T23:59:52.790Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/resale-tracker-ef981:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[debug] [2026-03-12T23:59:53.051Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/resale-tracker-ef981:testIamPermissions 200
+[debug] [2026-03-12T23:59:53.051Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/resale-tracker-ef981:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[info] 
+[info] === Deploying to 'resale-tracker-ef981'...
+[info] 
+[info] i  deploying firestore 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[debug] [2026-03-12T23:59:53.054Z] Checked if tokens are valid: true, expires at: 1773361880639
+[debug] [2026-03-12T23:59:53.054Z] Checked if tokens are valid: true, expires at: 1773361880639
+[debug] [2026-03-12T23:59:53.054Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/resale-tracker-ef981/databases/(default) [none]
+[debug] [2026-03-12T23:59:53.320Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/resale-tracker-ef981/databases/(default) 200
+[debug] [2026-03-12T23:59:53.320Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/resale-tracker-ef981/databases/(default) {"name":"projects/resale-tracker-ef981/databases/(default)","uid":"4c0e3997-9d57-48a8-9603-a891f9b9605f","createTime":"2026-03-12T19:23:57.902593Z","updateTime":"2026-03-12T19:23:57.902593Z","locationId":"eur3","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2026-03-12T22:59:53.310597Z","appEngineIntegrationMode":"DISABLED","keyPrefix":"e","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","freeTier":true,"realtimeUpdatesMode":"REALTIME_UPDATES_MODE_ENABLED","etag":"IPuU1+PIm5MDMMybzsGVm5MD"}
+[info] i  cloud.firestore: checking firestore.rules for compilation errors... 
+[debug] [2026-03-12T23:59:53.320Z] Checked if tokens are valid: true, expires at: 1773361880639
+[debug] [2026-03-12T23:59:53.320Z] Checked if tokens are valid: true, expires at: 1773361880639
+[debug] [2026-03-12T23:59:53.321Z] >>> [apiv2][query] POST https://firebaserules.googleapis.com/v1/projects/resale-tracker-ef981:test [none]
+[debug] [2026-03-12T23:59:53.321Z] >>> [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/resale-tracker-ef981:test [omitted]
+[debug] [2026-03-12T23:59:54.113Z] <<< [apiv2][status] POST https://firebaserules.googleapis.com/v1/projects/resale-tracker-ef981:test 200
+[debug] [2026-03-12T23:59:54.113Z] <<< [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/resale-tracker-ef981:test {}
+[info] ✔  cloud.firestore: rules file firestore.rules compiled successfully 
+[debug] [2026-03-12T23:59:54.114Z] Checked if tokens are valid: true, expires at: 1773361880639
+[debug] [2026-03-12T23:59:54.114Z] Checked if tokens are valid: true, expires at: 1773361880639
+[debug] [2026-03-12T23:59:54.114Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/resale-tracker-ef981/releases pageSize=10&pageToken=
+[debug] [2026-03-12T23:59:54.936Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/resale-tracker-ef981/releases 200
+[debug] [2026-03-12T23:59:54.937Z] <<< [apiv2][body] GET https://firebaserules.googleapis.com/v1/projects/resale-tracker-ef981/releases {"releases":[{"name":"projects/resale-tracker-ef981/releases/cloud.firestore","rulesetName":"projects/resale-tracker-ef981/rulesets/75e2141a-b393-4a35-981a-0d853b5ed547","createTime":"2026-03-12T19:24:02.261164Z","updateTime":"2026-03-12T23:32:43.615389Z"}]}
+[debug] [2026-03-12T23:59:54.937Z] Checked if tokens are valid: true, expires at: 1773361880639
+[debug] [2026-03-12T23:59:54.937Z] Checked if tokens are valid: true, expires at: 1773361880639
+[debug] [2026-03-12T23:59:54.937Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/resale-tracker-ef981/rulesets/75e2141a-b393-4a35-981a-0d853b5ed547 [none]
+[debug] [2026-03-12T23:59:55.598Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/resale-tracker-ef981/rulesets/75e2141a-b393-4a35-981a-0d853b5ed547 200
+[debug] [2026-03-12T23:59:55.598Z] <<< [apiv2][body] GET https://firebaserules.googleapis.com/v1/projects/resale-tracker-ef981/rulesets/75e2141a-b393-4a35-981a-0d853b5ed547 [omitted]
+[info] i  firestore: uploading rules firestore.rules... 
+[debug] [2026-03-12T23:59:55.600Z] Checked if tokens are valid: true, expires at: 1773361880639
+[debug] [2026-03-12T23:59:55.600Z] Checked if tokens are valid: true, expires at: 1773361880639
+[debug] [2026-03-12T23:59:55.601Z] >>> [apiv2][query] POST https://firebaserules.googleapis.com/v1/projects/resale-tracker-ef981/rulesets [none]
+[debug] [2026-03-12T23:59:55.601Z] >>> [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/resale-tracker-ef981/rulesets [omitted]
+[debug] [2026-03-12T23:59:56.002Z] <<< [apiv2][status] POST https://firebaserules.googleapis.com/v1/projects/resale-tracker-ef981/rulesets 200
+[debug] [2026-03-12T23:59:56.002Z] <<< [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/resale-tracker-ef981/rulesets {"name":"projects/resale-tracker-ef981/rulesets/6366b659-78de-4ec0-a6be-0b5dc66a7928","source":{"files":[{"content":"rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    function isSignedIn() {\n      return request.auth != null;\n    }\n\n    match /packages/{packageId} {\n      allow read, create, update, delete: if isSignedIn();\n    }\n\n    match /products/{productId} {\n      allow read, create, update, delete: if isSignedIn();\n    }\n  }\n}\n","name":"firestore.rules"}]},"createTime":"2026-03-12T23:59:55.934527Z","metadata":{"services":["cloud.firestore"]}}
+[debug] [2026-03-12T23:59:56.003Z] [rules] created ruleset projects/resale-tracker-ef981/rulesets/6366b659-78de-4ec0-a6be-0b5dc66a7928
+[debug] [2026-03-12T23:59:56.004Z] [rules] releasing cloud.firestore/(default) with ruleset projects/resale-tracker-ef981/rulesets/6366b659-78de-4ec0-a6be-0b5dc66a7928
+[debug] [2026-03-12T23:59:56.005Z] Checked if tokens are valid: true, expires at: 1773361880639
+[debug] [2026-03-12T23:59:56.005Z] Checked if tokens are valid: true, expires at: 1773361880639
+[debug] [2026-03-12T23:59:56.006Z] >>> [apiv2][query] PATCH https://firebaserules.googleapis.com/v1/projects/resale-tracker-ef981/releases/cloud.firestore/(default) [none]
+[debug] [2026-03-12T23:59:56.008Z] >>> [apiv2][body] PATCH https://firebaserules.googleapis.com/v1/projects/resale-tracker-ef981/releases/cloud.firestore/(default) {"release":{"name":"projects/resale-tracker-ef981/releases/cloud.firestore/(default)","rulesetName":"projects/resale-tracker-ef981/rulesets/6366b659-78de-4ec0-a6be-0b5dc66a7928"}}
+[debug] [2026-03-12T23:59:56.810Z] <<< [apiv2][status] PATCH https://firebaserules.googleapis.com/v1/projects/resale-tracker-ef981/releases/cloud.firestore/(default) 200
