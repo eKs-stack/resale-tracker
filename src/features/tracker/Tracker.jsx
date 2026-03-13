@@ -1383,7 +1383,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
   return (
     <div
       style={{
-        minHeight: "var(--app-height)",
+        minHeight: "calc(var(--app-height) + 1px)",
         display: "flex",
         flexDirection: "column"
       }}
