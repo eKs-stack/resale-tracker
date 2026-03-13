@@ -1394,7 +1394,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
       <div
         style={{
           padding: "12px 16px",
-          paddingTop: "calc(12px + env(safe-area-inset-top, 0px))",
+          paddingTop: "calc(12px + var(--safe-top))",
           borderBottom: "1px solid var(--surface-1)",
           display: "flex",
           justifyContent: "space-between",
@@ -2202,8 +2202,8 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
           alignItems: "flex-end",
           boxSizing: "border-box",
           paddingTop: 8,
-          paddingBottom: "calc(8px + env(safe-area-inset-bottom, 0px))",
-          minHeight: "calc(64px + env(safe-area-inset-bottom, 0px))",
+          paddingBottom: "calc(8px + var(--safe-bottom))",
+          minHeight: "calc(64px + var(--safe-bottom))",
           flexShrink: 0
         }}
       >

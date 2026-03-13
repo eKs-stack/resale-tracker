@@ -16,8 +16,8 @@ export default function Modal({ open, onClose, title, children }) {
         display: "flex",
         alignItems: "flex-end",
         justifyContent: "center",
-        paddingLeft: "env(safe-area-inset-left, 0px)",
-        paddingRight: "env(safe-area-inset-right, 0px)",
+        paddingLeft: "var(--safe-left)",
+        paddingRight: "var(--safe-right)",
         zIndex: 1000
       }}
     >
@@ -28,7 +28,7 @@ export default function Modal({ open, onClose, title, children }) {
           borderTop: "1px solid var(--border)",
           borderRadius: "20px 20px 0 0",
           padding: "24px 20px",
-          paddingBottom: "calc(24px + env(safe-area-inset-bottom, 0px))",
+          paddingBottom: "calc(24px + var(--safe-bottom))",
           width: "100%",
           maxWidth: 500,
           minWidth: 0,
