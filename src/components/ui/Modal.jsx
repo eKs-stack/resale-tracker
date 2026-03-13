@@ -28,7 +28,7 @@ export default function Modal({ open, onClose, title, children }) {
           borderTop: "1px solid var(--border)",
           borderRadius: "20px 20px 0 0",
           padding: "24px 20px",
-          paddingBottom: "calc(24px + var(--safe-bottom))",
+          paddingBottom: "calc(24px + var(--safe-bottom) + var(--viewport-gesture-gap))",
           width: "100%",
           maxWidth: 500,
           minWidth: 0,

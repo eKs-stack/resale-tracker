@@ -1477,7 +1477,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
           overflowX: "hidden",
           WebkitOverflowScrolling: "touch",
           padding: 16,
-          paddingBottom: 20
+          paddingBottom: "calc(100px + var(--safe-bottom) + var(--viewport-gesture-gap))"
         }}
       >
         {tab === "dashboard" && (
@@ -2194,17 +2194,37 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
       </div>
 
       <div
+        aria-hidden="true"
         style={{
+          position: "fixed",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: "calc(var(--safe-bottom) + var(--viewport-gesture-gap))",
+          background: "var(--surface-0)",
+          pointerEvents: "none",
+          zIndex: 29
+        }}
+      />
+
+      <div
+        style={{
+          position: "fixed",
+          left: 0,
+          right: 0,
+          bottom: "calc(-1 * var(--viewport-gesture-gap))",
           background: "var(--surface-0)",
           borderTop: "1px solid var(--border)",
           display: "flex",
           justifyContent: "space-around",
           alignItems: "flex-end",
           boxSizing: "border-box",
-          paddingTop: 8,
-          paddingBottom: "calc(8px + var(--safe-bottom))",
-          minHeight: "calc(64px + var(--safe-bottom))",
-          flexShrink: 0
+          paddingTop: 2,
+          paddingBottom: "calc(10px + var(--safe-bottom) + var(--viewport-gesture-gap))",
+          minHeight: "calc(70px + var(--safe-bottom) + var(--viewport-gesture-gap))",
+          paddingLeft: "var(--safe-left)",
+          paddingRight: "var(--safe-right)",
+          zIndex: 30
         }}
       >
         {tabList.map((tabItem) => (
@@ -2220,7 +2240,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
               alignItems: "center",
               justifyContent: "center",
               gap: 4,
-              padding: "8px 20px",
+              padding: "11px 20px 4px",
               color: tab === tabItem.id ? "var(--accent)" : "var(--text-muted)",
               transition: "color .2s",
               lineHeight: 1

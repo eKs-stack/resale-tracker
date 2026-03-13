@@ -40,6 +40,51 @@ export default function App() {
     }
   }, [theme]);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") return;
+
+    const root = document.documentElement;
+    const hasVisualViewport = typeof window.visualViewport !== "undefined";
+    let rafId = 0;
+
+    const updateViewportGestureGap = () => {
+      rafId = 0;
+      const vv = window.visualViewport;
+      const innerHeight = window.innerHeight || 0;
+      const visualHeight = vv?.height ?? innerHeight;
+      const offsetTop = vv?.offsetTop ?? 0;
+
+      const keyboardOpen = innerHeight - visualHeight > 260;
+      const rawGap = keyboardOpen ? 0 : innerHeight - visualHeight - offsetTop;
+      const safeGap = Math.max(0, Math.min(160, Math.round(rawGap)));
+
+      root.style.setProperty("--viewport-gesture-gap", `${safeGap}px`);
+    };
+
+    const requestUpdate = () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(updateViewportGestureGap);
+    };
+
+    requestUpdate();
+    window.addEventListener("resize", requestUpdate);
+    window.addEventListener("orientationchange", requestUpdate);
+    if (hasVisualViewport) {
+      window.visualViewport.addEventListener("resize", requestUpdate);
+      window.visualViewport.addEventListener("scroll", requestUpdate);
+    }
+
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      window.removeEventListener("resize", requestUpdate);
+      window.removeEventListener("orientationchange", requestUpdate);
+      if (hasVisualViewport) {
+        window.visualViewport.removeEventListener("resize", requestUpdate);
+        window.visualViewport.removeEventListener("scroll", requestUpdate);
+      }
+    };
+  }, []);
+
   if (checking) {
     return <LoadingScreen fullBackground />;
   }

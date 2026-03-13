@@ -5,6 +5,7 @@ export const globalCSS = `@import url('https://fonts.googleapis.com/css2?family=
 --safe-bottom:clamp(0px,env(safe-area-inset-bottom,0px),34px);
 --safe-left:clamp(0px,env(safe-area-inset-left,0px),44px);
 --safe-right:clamp(0px,env(safe-area-inset-right,0px),44px);
+--viewport-gesture-gap:0px;
 --bg-root:#2a1b37;
 --bg-root-alt:#342145;
 --bg-glow:#5a3a6b;
