@@ -1305,8 +1305,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
     return (
       <div
         style={{
-          position: "fixed",
-          inset: 0,
+          height: "var(--app-height)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -1384,11 +1383,9 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
   return (
     <div
       style={{
-        position: "fixed",
-        inset: 0,
+        minHeight: "var(--app-height)",
         display: "flex",
-        flexDirection: "column",
-        overflow: "hidden"
+        flexDirection: "column"
       }}
     >
       <div
@@ -1472,12 +1469,8 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
       <div
         style={{
           flex: 1,
-          minHeight: 0,
-          overflowY: "auto",
-          overflowX: "hidden",
-          WebkitOverflowScrolling: "touch",
           padding: 16,
-          paddingBottom: "calc(100px + var(--safe-bottom) + var(--viewport-gesture-gap))"
+          paddingBottom: 20
         }}
       >
         {tab === "dashboard" && (
@@ -2194,37 +2187,21 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
       </div>
 
       <div
-        aria-hidden="true"
         style={{
-          position: "fixed",
-          left: 0,
-          right: 0,
+          position: "sticky",
           bottom: 0,
-          height: "calc(var(--safe-bottom) + var(--viewport-gesture-gap))",
-          background: "var(--surface-0)",
-          pointerEvents: "none",
-          zIndex: 29
-        }}
-      />
-
-      <div
-        style={{
-          position: "fixed",
-          left: 0,
-          right: 0,
-          bottom: "calc(-1 * var(--viewport-gesture-gap))",
           background: "var(--surface-0)",
           borderTop: "1px solid var(--border)",
           display: "flex",
           justifyContent: "space-around",
           alignItems: "flex-end",
           boxSizing: "border-box",
-          paddingTop: 2,
-          paddingBottom: "calc(10px + var(--safe-bottom) + var(--viewport-gesture-gap))",
-          minHeight: "calc(70px + var(--safe-bottom) + var(--viewport-gesture-gap))",
+          paddingTop: 8,
+          paddingBottom: "calc(8px + var(--safe-bottom))",
+          minHeight: "calc(64px + var(--safe-bottom))",
           paddingLeft: "var(--safe-left)",
           paddingRight: "var(--safe-right)",
-          zIndex: 30
+          zIndex: 20
         }}
       >
         {tabList.map((tabItem) => (
@@ -2240,7 +2217,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
               alignItems: "center",
               justifyContent: "center",
               gap: 4,
-              padding: "11px 20px 4px",
+              padding: "8px 20px",
               color: tab === tabItem.id ? "var(--accent)" : "var(--text-muted)",
               transition: "color .2s",
               lineHeight: 1

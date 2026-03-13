@@ -1,11 +1,10 @@
 export const globalCSS = `@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=JetBrains+Mono:wght@400;700;800&display=swap');
 :root{
---app-height:100vh;
+--app-height:100dvh;
 --safe-top:clamp(0px,env(safe-area-inset-top,0px),59px);
 --safe-bottom:clamp(0px,env(safe-area-inset-bottom,0px),34px);
 --safe-left:clamp(0px,env(safe-area-inset-left,0px),44px);
 --safe-right:clamp(0px,env(safe-area-inset-right,0px),44px);
---viewport-gesture-gap:0px;
 --bg-root:#2a1b37;
 --bg-root-alt:#342145;
 --bg-glow:#5a3a6b;
@@ -57,10 +56,10 @@ export const globalCSS = `@import url('https://fonts.googleapis.com/css2?family=
 --alert:#fb7185;
 --violet:#a78bfa
 }
-@supports (height: 100dvh){:root{--app-height:100dvh}}
+@supports not (height: 100dvh){:root{--app-height:100vh}}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body,#root{height:100%;width:100%;background:radial-gradient(120% 120% at 15% -10%,var(--bg-glow) 0%,var(--bg-root) 40%,var(--bg-depth) 100%);color:var(--text-primary);font-family:'JetBrains Mono',monospace;font-size:14px;overflow:hidden;overscroll-behavior:none}
-html,body,#root{position:fixed;inset:0}
+html,body,#root{min-height:var(--app-height);width:100%;background:radial-gradient(120% 120% at 15% -10%,var(--bg-glow) 0%,var(--bg-root) 40%,var(--bg-depth) 100%);color:var(--text-primary);font-family:'JetBrains Mono',monospace;font-size:14px;overflow-x:hidden}
+body{overflow-y:auto}
 input,select,button{font-family:inherit}
 input,select{color-scheme:dark}
 input[type="date"]{width:100%;max-width:100%;min-width:0;display:block;appearance:none;-webkit-appearance:none}

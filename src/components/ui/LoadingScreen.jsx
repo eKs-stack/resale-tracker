@@ -8,8 +8,7 @@ export default function LoadingScreen({ fullBackground = false }) {
   return (
     <div
       style={{
-        position: "fixed",
-        inset: 0,
+        height: "var(--app-height)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
