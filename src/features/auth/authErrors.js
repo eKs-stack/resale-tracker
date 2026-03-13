@@ -11,7 +11,10 @@ const AUTH_ERROR_KEYS = {
   "auth/account-exists-with-different-credential": "auth.errors.accountExistsDifferentCredential",
   "auth/operation-not-allowed": "auth.errors.operationNotAllowed",
   "auth/unauthorized-domain": "auth.errors.unauthorizedDomain",
-  "auth/network-request-failed": "auth.errors.networkRequestFailed"
+  "auth/network-request-failed": "auth.errors.networkRequestFailed",
+  "auth/requires-recent-login": "auth.errors.requiresRecentLogin",
+  "auth/too-many-requests": "auth.errors.tooManyRequests",
+  "auth/user-token-expired": "auth.errors.userTokenExpired"
 };
 
 export const getAuthErrorMessage = (error, t) =>

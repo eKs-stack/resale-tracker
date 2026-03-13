@@ -5,7 +5,7 @@ export default function Field({ label, children }) {
         style={{
           display: "block",
           fontSize: 11,
-          color: "#95a8c0",
+          color: "var(--text-muted)",
           marginBottom: 6,
           textTransform: "uppercase",
           letterSpacing: 0.5,

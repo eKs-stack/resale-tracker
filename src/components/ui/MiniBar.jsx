@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { formatCurrency } from "../../utils/trackerUtils";
 
-export default function MiniBar({ data, color = "#0d3" }) {
+export default function MiniBar({ data, color = "var(--accent)" }) {
   const { i18n } = useTranslation();
   const locale = i18n.resolvedLanguage || "es";
 
@@ -17,7 +17,7 @@ export default function MiniBar({ data, color = "#0d3" }) {
             style={{
               width: 70,
               fontSize: 10,
-              color: "#b0c2d8",
+              color: "var(--text-soft)",
               textAlign: "right",
               flexShrink: 0,
               overflow: "hidden",
@@ -30,7 +30,7 @@ export default function MiniBar({ data, color = "#0d3" }) {
           <div
             style={{
               flex: 1,
-              background: "#0d1420",
+              background: "var(--surface-0)",
               borderRadius: 4,
               height: 22,
               position: "relative",
@@ -55,7 +55,7 @@ export default function MiniBar({ data, color = "#0d3" }) {
                 transform: "translateY(-50%)",
                 fontSize: 10,
                 fontWeight: 700,
-                color: "#c2d1e5"
+                color: "var(--text-primary)"
               }}
             >
               {formatCurrency(item.value, locale)}

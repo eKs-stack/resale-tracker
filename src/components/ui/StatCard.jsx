@@ -1,9 +1,9 @@
-export default function StatCard({ label, value, sub, accent = "#0d3" }) {
+export default function StatCard({ label, value, sub, accent = "var(--accent)" }) {
   return (
     <div
       style={{
-        background: "#111a26",
-        border: "1px solid #1c2738",
+        background: "var(--surface-1)",
+        border: "1px solid var(--border)",
         borderRadius: 14,
         padding: "16px 18px",
         flex: "1 1 45%",
@@ -13,7 +13,7 @@ export default function StatCard({ label, value, sub, accent = "#0d3" }) {
       <div
         style={{
           fontSize: 10,
-          color: "#95a8c0",
+          color: "var(--text-muted)",
           textTransform: "uppercase",
           letterSpacing: 1,
           marginBottom: 4
@@ -22,7 +22,19 @@ export default function StatCard({ label, value, sub, accent = "#0d3" }) {
         {label}
       </div>
       <div style={{ fontSize: 22, fontWeight: 800, color: accent }}>{value}</div>
-      {sub && <div style={{ fontSize: 10, color: "#7b8fa9", marginTop: 2 }}>{sub}</div>}
+      {sub && (
+        <div
+          style={{
+            fontSize: 10,
+            color: "var(--text-subtle)",
+            marginTop: 2,
+            lineHeight: 1.35,
+            textWrap: "balance"
+          }}
+        >
+          {sub}
+        </div>
+      )}
     </div>
   );
 }

@@ -78,10 +78,12 @@ export const getDaysSince = (dateStr) => {
   return Math.floor((Date.now() - parsed.getTime()) / 86400000);
 };
 
-export const getAlertLevel = (product, t) => {
+export const getAlertLevel = (product, t, packageDate = null) => {
   if (isTerminalStatus(product?.status)) return null;
 
-  const days = getDaysSince(product?.createdAt);
+  const referenceDate = packageDate || product?.purchaseDate || product?.createdAt;
+  const days = Math.max(0, getDaysSince(referenceDate));
+  const reviewedAlertDays = Math.max(0, parseInt(product?.reviewedAlertDays, 10) || 0);
   let matched = null;
 
   for (const alert of ALERT_LEVELS) {
@@ -93,6 +95,8 @@ export const getAlertLevel = (product, t) => {
       };
     }
   }
+
+  if (matched && reviewedAlertDays >= matched.days) return null;
 
   return matched;
 };
@@ -122,6 +126,43 @@ export const getSoldUnitPrice = (product) => {
   const total = getProductRevenue(product);
 
   return soldQty > 0 ? total / soldQty : 0;
+};
+
+const roundMoney = (value) => Math.round(((Number(value) || 0) + Number.EPSILON) * 100) / 100;
+
+export const getPriceDropSuggestions = (product, alert) => {
+  const basePrice = Number(product?.estPrice) || 0;
+  const percents = Array.isArray(alert?.dropPercents)
+    ? alert.dropPercents
+        .map((percent) => Number(percent) || 0)
+        .filter((percent) => percent > 0 && percent < 100)
+    : [];
+
+  if (basePrice <= 0 || percents.length === 0) return [];
+
+  return percents.map((percent) => ({
+    percent,
+    unitPrice: roundMoney(basePrice * (1 - percent / 100))
+  }));
+};
+
+export const getSalePriceDelta = (product) => {
+  const expectedUnitPrice = Number(product?.estPrice) || 0;
+  const soldUnitPrice = getSoldUnitPrice(product);
+  const soldQuantity = getSoldQuantity(product);
+
+  if (expectedUnitPrice <= 0 || soldUnitPrice <= 0 || soldQuantity <= 0) return null;
+
+  const unitDelta = roundMoney(soldUnitPrice - expectedUnitPrice);
+  const totalDelta = roundMoney(unitDelta * soldQuantity);
+
+  return {
+    expectedUnitPrice,
+    soldUnitPrice,
+    soldQuantity,
+    unitDelta,
+    totalDelta
+  };
 };
 
 export const getAvailableQuantity = (product) =>

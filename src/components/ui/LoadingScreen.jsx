@@ -8,17 +8,17 @@ export default function LoadingScreen({ fullBackground = false }) {
   return (
     <div
       style={{
-        height: "100vh",
+        height: "var(--app-height)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: fullBackground ? "#070d16" : undefined
+        background: fullBackground ? "var(--bg-root)" : undefined
       }}
     >
       <style>{globalCSS}</style>
       <div style={{ textAlign: "center" }}>
         <AppLogo size={48} fontSize={16} />
-        <div style={{ color: "#95a8c0", fontSize: 13, marginTop: 12 }}>{t("common.loading")}</div>
+        <div style={{ color: "var(--text-muted)", fontSize: 13, marginTop: 12 }}>{t("common.loading")}</div>
       </div>
     </div>
   );

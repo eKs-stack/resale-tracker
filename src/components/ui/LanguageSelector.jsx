@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { selectS } from "../../constants/styles";
 
 const LANGUAGES = [
   { value: "es", labelKey: "language.es" },
@@ -16,7 +17,7 @@ export default function LanguageSelector({ compact = false }) {
         display: "inline-flex",
         alignItems: "center",
         gap: 8,
-        color: "#95a8c0",
+        color: "var(--text-muted)",
         fontSize: compact ? 10 : 11,
         textTransform: "uppercase",
         letterSpacing: 0.6
@@ -29,13 +30,14 @@ export default function LanguageSelector({ compact = false }) {
           i18n.changeLanguage(event.target.value);
         }}
         style={{
-          background: "#111a26",
-          color: "#d5e1ef",
-          border: "1px solid #304560",
+          ...selectS,
+          width: "auto",
+          minWidth: compact ? 78 : 84,
           borderRadius: 8,
-          padding: compact ? "4px 8px" : "6px 10px",
+          padding: compact ? "4px 30px 4px 8px" : "6px 32px 6px 10px",
           fontSize: compact ? 10 : 11,
-          cursor: "pointer"
+          backgroundPosition: "right 10px center",
+          backgroundSize: "14px"
         }}
       >
         {LANGUAGES.map((language) => (

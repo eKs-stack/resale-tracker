@@ -65,29 +65,39 @@ export const STATUS_BADGE_COLORS = {
 
 export const ALERT_LEVELS = [
   {
+    days: 7,
+    level: "notice",
+    color: "var(--info)",
+    bg: "rgba(87,58,116,.24)",
+    border: "rgba(184,154,214,.48)",
+    icon: "🪻",
+    messageKey: "alerts.reviewListing"
+  },
+  {
     days: 14,
     level: "warning",
-    color: "#fd0",
-    bg: "#1a1800",
-    border: "#3a3200",
+    color: "var(--warning)",
+    bg: "rgba(122,88,47,.26)",
+    border: "rgba(231,197,140,.48)",
     icon: "⚠️",
-    messageKey: "alerts.reducePrice"
+    messageKey: "alerts.reducePrice",
+    dropPercents: [20, 30]
   },
   {
     days: 28,
     level: "urgent",
-    color: "#f90",
-    bg: "#1a1000",
-    border: "#3a2200",
+    color: "var(--alert)",
+    bg: "rgba(124,81,52,.28)",
+    border: "rgba(213,155,105,.5)",
     icon: "🔥",
     messageKey: "alerts.sellAtCost"
   },
   {
     days: 42,
     level: "critical",
-    color: "#f43",
-    bg: "#1a0808",
-    border: "#3a1515",
+    color: "var(--danger)",
+    bg: "rgba(108,42,63,.32)",
+    border: "rgba(200,106,130,.55)",
     icon: "🚨",
     messageKey: "alerts.freeCapital"
   }

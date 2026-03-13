@@ -89,7 +89,7 @@ export default function LoginScreen() {
   return (
     <div
       style={{
-        height: "100vh",
+        height: "var(--app-height)",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -103,7 +103,7 @@ export default function LoginScreen() {
         <AppLogo size={56} fontSize={20} />
       </div>
       <h1 style={{ fontSize: 20, fontWeight: 800, marginBottom: 4 }}>{t("common.appName")}</h1>
-      <p style={{ fontSize: 11, color: "#95a8c0", marginBottom: 12 }}>
+      <p style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 12 }}>
         {isRegister ? t("auth.registerSubtitle") : t("auth.loginSubtitle")}
       </p>
       <div style={{ marginBottom: 20 }}>
@@ -149,12 +149,12 @@ export default function LoginScreen() {
         {error && (
           <div
             style={{
-              background: "#1a0808",
-              border: "1px solid #3a1515",
+              background: "rgba(118,40,62,.24)",
+              border: "1px solid rgba(200,106,130,.45)",
               borderRadius: 10,
               padding: "10px 14px",
               fontSize: 12,
-              color: "#f43",
+              color: "var(--danger)",
               marginBottom: 14
             }}
           >
@@ -175,18 +175,18 @@ export default function LoginScreen() {
         </button>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-          <div style={{ flex: 1, height: 1, background: "#2a3d58" }} />
+          <div style={{ flex: 1, height: 1, background: "var(--border-strong)" }} />
           <span
             style={{
               fontSize: 10,
-              color: "#95a8c0",
+              color: "var(--text-muted)",
               textTransform: "uppercase",
               letterSpacing: 1
             }}
           >
             {t("common.or")}
           </span>
-          <div style={{ flex: 1, height: 1, background: "#2a3d58" }} />
+          <div style={{ flex: 1, height: 1, background: "var(--border-strong)" }} />
         </div>
 
         <button
@@ -206,7 +206,7 @@ export default function LoginScreen() {
           style={{
             background: "transparent",
             border: "none",
-            color: "#95a8c0",
+            color: "var(--text-muted)",
             fontSize: 12,
             cursor: "pointer",
             width: "100%",

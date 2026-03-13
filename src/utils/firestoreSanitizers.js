@@ -80,6 +80,13 @@ export const sanitizeProductDoc = (raw, id) => {
       : null,
     soldDate: sanitizeDateInput(raw?.soldDate, null),
     soldBy: sanitizeText(raw?.soldBy, 120),
+    reviewedAlertDays: sanitizeInteger(raw?.reviewedAlertDays, {
+      min: 0,
+      max: 3650,
+      fallback: 0
+    }),
+    reviewedAt: sanitizeIsoDate(raw?.reviewedAt, null),
+    reviewedBy: sanitizeText(raw?.reviewedBy, 120),
     addedBy: sanitizeText(raw?.addedBy, 120),
     sourceProductId: sanitizeText(raw?.sourceProductId, 120),
     sales: Array.isArray(raw?.sales) ? raw.sales.slice(0, 200) : []

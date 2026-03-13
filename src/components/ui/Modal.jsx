@@ -11,7 +11,7 @@ export default function Modal({ open, onClose, title, children }) {
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.8)",
+        background: "rgba(24,8,33,0.78)",
         backdropFilter: "blur(8px)",
         display: "flex",
         alignItems: "flex-end",
@@ -22,8 +22,8 @@ export default function Modal({ open, onClose, title, children }) {
       <div
         onClick={(event) => event.stopPropagation()}
         style={{
-          background: "#0d1420",
-          borderTop: "1px solid #25354c",
+          background: "var(--surface-0)",
+          borderTop: "1px solid var(--border)",
           borderRadius: "20px 20px 0 0",
           padding: "24px 20px",
           paddingBottom: "calc(24px + env(safe-area-inset-bottom, 0px))",
@@ -42,13 +42,13 @@ export default function Modal({ open, onClose, title, children }) {
             marginBottom: 20
           }}
         >
-          <h3 style={{ fontSize: 17, fontWeight: 800, color: "#e8eef7" }}>{title}</h3>
+          <h3 style={{ fontSize: 17, fontWeight: 800, color: "var(--text-primary)" }}>{title}</h3>
           <button
             onClick={onClose}
             style={{
-              background: "#111a26",
-              color: "#c2d1e5",
-              border: "1px solid #25354c",
+              background: "var(--surface-1)",
+              color: "var(--text-soft)",
+              border: "1px solid var(--border)",
               borderRadius: 8,
               padding: "6px 10px",
               fontSize: 13,

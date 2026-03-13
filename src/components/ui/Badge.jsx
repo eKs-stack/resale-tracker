@@ -1,11 +1,11 @@
 const COLORS = {
-  green: { background: "#0d3", color: "#001a00" },
-  red: { background: "#f43", color: "#fff" },
-  yellow: { background: "#fd0", color: "#1a1400" },
-  blue: { background: "#08f", color: "#fff" },
-  purple: { background: "#a855f7", color: "#fff" },
-  neutral: { background: "#304560", color: "#d5e1ef" },
-  orange: { background: "#f90", color: "#1a0e00" }
+  green: { background: "var(--accent)", color: "var(--accent-ink)" },
+  red: { background: "var(--danger)", color: "var(--danger-ink)" },
+  yellow: { background: "var(--warning)", color: "var(--accent-ink)" },
+  blue: { background: "var(--info)", color: "var(--accent-ink)" },
+  purple: { background: "var(--violet)", color: "var(--text-primary)" },
+  neutral: { background: "var(--border)", color: "var(--text-primary)" },
+  orange: { background: "var(--alert)", color: "var(--accent-ink)" }
 };
 
 export default function Badge({ children, color = "neutral" }) {

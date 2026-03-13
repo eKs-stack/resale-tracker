@@ -1,10 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
-import { signOut } from "firebase/auth";
+import {
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  signOut,
+  updateEmail,
+  updatePassword,
+  updateProfile
+} from "firebase/auth";
 import { deleteDoc, doc, setDoc, updateDoc, writeBatch } from "firebase/firestore";
 import { useTranslation } from "react-i18next";
 import { auth, db } from "../../firebase";
 import useTrackerCollections from "../../hooks/useTrackerCollections";
 import {
+  ALERT_LEVELS,
   CATEGORIES,
   CONDITIONS,
   getCategoryKey,
@@ -29,6 +37,8 @@ import {
   getDayLabel,
   getProductQuantity,
   getProductRevenue,
+  getPriceDropSuggestions,
+  getSalePriceDelta,
   getSoldQuantity,
   getSoldUnitPrice
 } from "../../utils/trackerUtils";
@@ -47,8 +57,10 @@ import Field from "../../components/ui/Field";
 import LanguageSelector from "../../components/ui/LanguageSelector";
 import MiniBar from "../../components/ui/MiniBar";
 import Modal from "../../components/ui/Modal";
+import NumberInput from "../../components/ui/NumberInput";
 import StatCard from "../../components/ui/StatCard";
 import LoadingScreen from "../../components/ui/LoadingScreen";
+import { getAuthErrorMessage } from "../auth/authErrors";
 
 export default function Tracker({ user }) {
   const { t, i18n } = useTranslation();
@@ -62,6 +74,16 @@ export default function Tracker({ user }) {
   const [showPkgDetails, setShowPkgDetails] = useState(null);
   const [editProduct, setEditProduct] = useState(null);
   const [editPackage, setEditPackage] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showReviewLevel, setShowReviewLevel] = useState(null);
+  const [reviewingProductIds, setReviewingProductIds] = useState(new Set());
+  const [settingsName, setSettingsName] = useState("");
+  const [settingsEmail, setSettingsEmail] = useState("");
+  const [settingsCurrentPassword, setSettingsCurrentPassword] = useState("");
+  const [settingsNewPassword, setSettingsNewPassword] = useState("");
+  const [settingsBusy, setSettingsBusy] = useState(false);
+  const [settingsError, setSettingsError] = useState("");
+  const [settingsSuccess, setSettingsSuccess] = useState("");
 
   const [productSearch, setProductSearch] = useState("");
 
@@ -90,12 +112,19 @@ export default function Tracker({ user }) {
 
   const currency = (value) => formatCurrency(value, locale);
   const shortDate = (value) => formatDate(value, locale);
+  const noBreak = "\u00A0";
+  const unitCount = (value) => `${value}${noBreak}${t("common.unitShort")}`;
+  const productCount = (value) => `${value}${noBreak}${t("common.productsWord")}`;
 
   const statusLabel = (value) => t(`status.${getStatusKey(value)}`);
   const categoryLabel = (value) => t(`categories.${getCategoryKey(value)}`);
   const conditionLabel = (value) => t(`conditions.${getConditionKey(value)}`);
   const platformLabel = (value) => t(`platforms.${getPlatformKey(value)}`);
   const actor = () => sanitizeText(user.displayName || user.email || "unknown", 120);
+  const hasPasswordProvider = useMemo(
+    () => (user?.providerData || []).some((provider) => provider.providerId === "password"),
+    [user]
+  );
 
   useEffect(() => {
     if (tab !== "products" && selectionMode) {
@@ -175,15 +204,44 @@ export default function Tracker({ user }) {
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }, [products, showPkgDetails]);
 
+  const packageDateById = useMemo(() => {
+    const map = {};
+    packages.forEach((pkg) => {
+      map[pkg.id] = pkg.date || null;
+    });
+    return map;
+  }, [packages]);
+
   const stats = useMemo(() => buildStats(packages, products, locale), [packages, products, locale]);
 
   const staleProducts = useMemo(
     () =>
       products
-        .map((product) => ({ ...product, alert: getAlertLevel(product, t) }))
+        .map((product) => ({
+          ...product,
+          alert: getAlertLevel(product, t, packageDateById[product.packageId] || null)
+        }))
         .filter((product) => product.alert && getAvailableQuantity(product) > 0)
-        .sort((a, b) => b.alert.days - a.alert.days),
-    [products, t]
+        .sort((a, b) => b.alert.daysSince - a.alert.daysSince),
+    [products, t, packageDateById]
+  );
+
+  const reviewFolders = useMemo(
+    () =>
+      ALERT_LEVELS.map((alert) => {
+        const items = staleProducts.filter((product) => product.alert.level === alert.level);
+        return {
+          ...alert,
+          items,
+          count: items.length
+        };
+      }),
+    [staleProducts]
+  );
+
+  const activeReviewFolder = useMemo(
+    () => reviewFolders.find((folder) => folder.level === showReviewLevel) || null,
+    [reviewFolders, showReviewLevel]
   );
 
   const filteredProducts = useMemo(() => {
@@ -283,6 +341,134 @@ export default function Tracker({ user }) {
     });
   };
 
+  const openSettings = () => {
+    setSettingsName(user.displayName || "");
+    setSettingsEmail(user.email || "");
+    setSettingsCurrentPassword("");
+    setSettingsNewPassword("");
+    setSettingsError("");
+    setSettingsSuccess("");
+    setShowSettings(true);
+  };
+
+  const buildPasswordCredential = () => {
+    const currentUser = auth.currentUser;
+    const safeEmail = sanitizeText(currentUser?.email || "", 160);
+    const safePassword = sanitizeText(settingsCurrentPassword, 200);
+    if (!safeEmail || !safePassword) return null;
+    return EmailAuthProvider.credential(safeEmail, safePassword);
+  };
+
+  const saveDisplayName = async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+
+    const nextName = sanitizeText(settingsName, 120);
+    if (!nextName) {
+      setSettingsError(t("settings.displayNameRequired"));
+      setSettingsSuccess("");
+      return;
+    }
+
+    setSettingsBusy(true);
+    setSettingsError("");
+    setSettingsSuccess("");
+
+    try {
+      await updateProfile(currentUser, { displayName: nextName });
+      setSettingsSuccess(t("settings.profileUpdated"));
+    } catch (err) {
+      setSettingsError(getAuthErrorMessage(err, t));
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
+  const saveEmail = async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+
+    const safeEmail = sanitizeText(settingsEmail, 160).toLowerCase();
+    if (!safeEmail) {
+      setSettingsError(t("settings.emailRequired"));
+      setSettingsSuccess("");
+      return;
+    }
+
+    if (safeEmail === (currentUser.email || "").toLowerCase()) {
+      setSettingsError("");
+      setSettingsSuccess(t("settings.noEmailChanges"));
+      return;
+    }
+
+    if (hasPasswordProvider && !sanitizeText(settingsCurrentPassword, 200)) {
+      setSettingsError(t("settings.currentPasswordRequired"));
+      setSettingsSuccess("");
+      return;
+    }
+
+    setSettingsBusy(true);
+    setSettingsError("");
+    setSettingsSuccess("");
+
+    try {
+      if (hasPasswordProvider) {
+        const credential = buildPasswordCredential();
+        if (!credential) throw { code: "auth/requires-recent-login" };
+        await reauthenticateWithCredential(currentUser, credential);
+      }
+      await updateEmail(currentUser, safeEmail);
+      setSettingsCurrentPassword("");
+      setSettingsSuccess(t("settings.emailUpdated", { email: safeEmail }));
+    } catch (err) {
+      setSettingsError(getAuthErrorMessage(err, t));
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
+  const savePassword = async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+
+    if (!hasPasswordProvider) {
+      setSettingsError(t("settings.passwordNotAvailable"));
+      setSettingsSuccess("");
+      return;
+    }
+
+    const safePassword = sanitizeText(settingsNewPassword, 200);
+    if (safePassword.length < 6) {
+      setSettingsError(t("settings.passwordTooShort"));
+      setSettingsSuccess("");
+      return;
+    }
+
+    if (!sanitizeText(settingsCurrentPassword, 200)) {
+      setSettingsError(t("settings.currentPasswordRequired"));
+      setSettingsSuccess("");
+      return;
+    }
+
+    setSettingsBusy(true);
+    setSettingsError("");
+    setSettingsSuccess("");
+
+    try {
+      const credential = buildPasswordCredential();
+      if (!credential) throw { code: "auth/requires-recent-login" };
+      await reauthenticateWithCredential(currentUser, credential);
+      await updatePassword(currentUser, safePassword);
+      setSettingsCurrentPassword("");
+      setSettingsNewPassword("");
+      setSettingsSuccess(t("settings.passwordUpdated"));
+    } catch (err) {
+      setSettingsError(getAuthErrorMessage(err, t));
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
   const addPkg = async () => {
     const safeDate = sanitizeDateInput(pkgDate, nowInputDate());
     const quantity = sanitizeInteger(pkgQty, { min: 1, max: 200, fallback: 1 });
@@ -353,6 +539,9 @@ export default function Tracker({ user }) {
       soldPrice: 0,
       soldPlatform: null,
       soldDate: null,
+      reviewedAlertDays: 0,
+      reviewedAt: null,
+      reviewedBy: null,
       addedBy: actor(),
       sales: []
     };
@@ -553,6 +742,9 @@ export default function Tracker({ user }) {
       soldPlatform: safePlatform,
       soldDate: safeSellDate,
       soldBy: actor(),
+      reviewedAlertDays: 0,
+      reviewedAt: null,
+      reviewedBy: null,
       addedBy: sanitizeText(currentSellProduct.addedBy || actor(), 120),
       sourceProductId: sanitizeText(currentSellProduct.id, 120)
     };
@@ -650,6 +842,34 @@ export default function Tracker({ user }) {
     await deleteDoc(doc(db, "products", id));
   };
 
+  const markProductReviewed = async (product) => {
+    if (!product?.id || !product?.alert?.days) return;
+
+    const reviewedAt = new Date().toISOString();
+    const alertDays = Number(product.alert.days) || 0;
+    if (alertDays <= 0) return;
+
+    setReviewingProductIds((previous) => {
+      const next = new Set(previous);
+      next.add(product.id);
+      return next;
+    });
+
+    try {
+      await updateDoc(doc(db, "products", product.id), {
+        reviewedAlertDays: alertDays,
+        reviewedAt,
+        reviewedBy: actor()
+      });
+    } finally {
+      setReviewingProductIds((previous) => {
+        const next = new Set(previous);
+        next.delete(product.id);
+        return next;
+      });
+    }
+  };
+
   const suggestedCost = useMemo(() => {
     if (pkgCost) return null;
     const day = dayOfWeek(sanitizeDateInput(pkgDate, nowInputDate()));
@@ -681,15 +901,25 @@ export default function Tracker({ user }) {
 
   const renderProductCard = (product) => {
     const pkg = getPackageById(product.packageId);
-    const alert = getAlertLevel(product, t);
+    const alert = getAlertLevel(product, t, pkg?.date || null);
+    const alertDropSuggestions = getPriceDropSuggestions(product, alert);
+    const dropSuggestionText = alertDropSuggestions
+      .map((item) =>
+        t("alerts.dropSuggestionItem", {
+          percent: item.percent,
+          price: currency(item.unitPrice)
+        })
+      )
+      .join(" · ");
     const quantity = getProductQuantity(product);
     const soldQty = getSoldQuantity(product);
     const availableQty = getAvailableQuantity(product);
     const revenue = getProductRevenue(product);
+    const salePriceDelta = isSoldStatus(product.status) ? getSalePriceDelta(product) : null;
 
     const isSelected = selectedProductIds.has(product.id);
-    const cardBackground = isSelected ? "#112417" : alert ? alert.bg : "#111a26";
-    const cardBorder = isSelected ? "#0d3" : alert ? alert.border : "#1c2738";
+    const cardBackground = isSelected ? "var(--surface-3)" : alert ? alert.bg : "var(--surface-1)";
+    const cardBorder = isSelected ? "var(--accent)" : alert ? alert.border : "var(--border)";
 
     return (
       <div
@@ -701,7 +931,7 @@ export default function Tracker({ user }) {
           borderRadius: 14,
           padding: "14px 16px",
           cursor: selectionMode ? "pointer" : "default",
-          boxShadow: isSelected ? "0 0 0 1px rgba(0,221,51,.4) inset" : "none",
+          boxShadow: isSelected ? "0 0 0 1px rgba(216,176,111,.45) inset" : "none",
           transition: "background .15s ease, border-color .15s ease, box-shadow .15s ease"
         }}
       >
@@ -726,7 +956,7 @@ export default function Tracker({ user }) {
             >
               {product.name}
             </div>
-            <div style={{ fontSize: 10, color: "#95a8c0", marginTop: 2 }}>
+            <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
               {categoryLabel(product.category)} · {soldQty}/{quantity} {t("common.unitShort")}
               {pkg && <span> · {shortDate(pkg.date)}</span>}
             </div>
@@ -737,7 +967,7 @@ export default function Tracker({ user }) {
               <span
                 style={{
                   fontSize: 11,
-                  color: isSelected ? "#0d3" : "#7b8fa9",
+                  color: isSelected ? "var(--accent)" : "var(--text-subtle)",
                   fontWeight: 700
                 }}
               >
@@ -751,41 +981,73 @@ export default function Tracker({ user }) {
         </div>
 
         {alert && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-            <span
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: "50%",
-                background: alert.color,
-                display: "inline-block",
-                animation: alert.level === "critical" ? "pulse 1.5s infinite" : "none"
-              }}
-            />
-            <span style={{ fontSize: 10, color: alert.color, fontWeight: 700 }}>
-              {alert.daysSince}d · {alert.message}
-            </span>
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: "50%",
+                  background: alert.color,
+                  display: "inline-block",
+                  animation: alert.level === "critical" ? "pulse 1.5s infinite" : "none"
+                }}
+              />
+              <span style={{ fontSize: 10, color: alert.color, fontWeight: 700 }}>
+                {alert.daysSince}d · {alert.message}
+              </span>
+            </div>
+            {dropSuggestionText && (
+              <div style={{ fontSize: 10, color: "var(--text-soft)", marginTop: 3, paddingLeft: 13 }}>
+                {t("alerts.dropSuggestionPrefix")} {dropSuggestionText}
+              </div>
+            )}
           </div>
         )}
 
         {revenue > 0 && (
-          <div style={{ fontSize: 12, fontWeight: 800, color: "#0d3", marginBottom: 6 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: "var(--accent)", marginBottom: 6 }}>
             {t("products.income")}: {currency(revenue)}
             {getSoldQuantity(product) > 0 && (
-              <span style={{ fontSize: 10, color: "#95a8c0", fontWeight: 500 }}>
+              <span style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 500 }}>
                 {` · ${currency(getSoldUnitPrice(product))}${t("common.perUnit")}`}
               </span>
             )}
             {product.soldPlatform && (
-              <span style={{ fontSize: 10, color: "#95a8c0", fontWeight: 500 }}>
+              <span style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 500 }}>
                 {` · ${platformLabel(product.soldPlatform)}`}
               </span>
             )}
           </div>
         )}
 
+        {salePriceDelta && (
+          <div
+            style={{
+              fontSize: 10,
+              marginBottom: 6,
+              color: salePriceDelta.totalDelta > 0 ? "var(--accent)" : salePriceDelta.totalDelta < 0 ? "var(--danger)" : "var(--text-soft)",
+              fontWeight: 700
+            }}
+          >
+            {salePriceDelta.totalDelta > 0
+              ? t("products.saleVsExpectedAbove", {
+                  total: currency(Math.abs(salePriceDelta.totalDelta)),
+                  unit: currency(Math.abs(salePriceDelta.unitDelta))
+                })
+              : salePriceDelta.totalDelta < 0
+                ? t("products.saleVsExpectedBelow", {
+                    total: currency(Math.abs(salePriceDelta.totalDelta)),
+                    unit: currency(Math.abs(salePriceDelta.unitDelta))
+                  })
+                : t("products.saleVsExpectedEqual", {
+                    price: currency(salePriceDelta.expectedUnitPrice)
+                  })}
+          </div>
+        )}
+
         {product.estPrice > 0 && availableQty > 0 && (
-          <div style={{ fontSize: 10, color: "#95a8c0", marginBottom: 6 }}>
+          <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 6 }}>
             {t("products.targetWithUnits", {
               price: currency(product.estPrice),
               units: availableQty
@@ -802,8 +1064,8 @@ export default function Tracker({ user }) {
               }}
               style={{
                 flex: 1,
-                background: isSelected ? "#0d3" : "#1c2738",
-                color: isSelected ? "#001a00" : "#c2d1e5",
+                background: isSelected ? "var(--accent)" : "var(--border)",
+                color: isSelected ? "var(--accent-ink)" : "var(--text-soft)",
                 border: "none",
                 padding: 10,
                 borderRadius: 8,
@@ -824,8 +1086,8 @@ export default function Tracker({ user }) {
                   }}
                   style={{
                     flex: 1,
-                    background: "#0d3",
-                    color: "#000",
+                    background: "var(--accent)",
+                    color: "var(--accent-ink)",
                     border: "none",
                     padding: 10,
                     borderRadius: 8,
@@ -843,9 +1105,9 @@ export default function Tracker({ user }) {
                   openEditProduct(product);
                 }}
                 style={{
-                  background: "#1c2738",
+                  background: "var(--border)",
                   border: "none",
-                  color: "#08f",
+                  color: "var(--info)",
                   padding: "10px 12px",
                   borderRadius: 8,
                   fontSize: 13,
@@ -863,9 +1125,9 @@ export default function Tracker({ user }) {
                   }
                 }}
                 style={{
-                  background: "#1c2738",
+                  background: "var(--border)",
                   border: "none",
-                  color: "#f43",
+                  color: "var(--danger)",
                   padding: "10px 12px",
                   borderRadius: 8,
                   fontSize: 12,
@@ -887,7 +1149,7 @@ export default function Tracker({ user }) {
     return (
       <div
         style={{
-          height: "100vh",
+          height: "var(--app-height)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -898,8 +1160,8 @@ export default function Tracker({ user }) {
           style={{
             width: "100%",
             maxWidth: 420,
-            background: "#111a26",
-            border: "1px solid #2a3d58",
+            background: "var(--surface-1)",
+            border: "1px solid var(--border)",
             borderRadius: 14,
             padding: 18
           }}
@@ -908,15 +1170,15 @@ export default function Tracker({ user }) {
             <AppLogo size={36} fontSize={12} />
             <div style={{ fontWeight: 800 }}>{t("common.dataLoadErrorTitle")}</div>
           </div>
-          <div style={{ color: "#95a8c0", fontSize: 12, marginBottom: 14 }}>
+          <div style={{ color: "var(--text-muted)", fontSize: 12, marginBottom: 14 }}>
             {t("common.dataLoadErrorBody")}
           </div>
           <div
             style={{
-              background: "#0d1420",
-              border: "1px solid #25354c",
+              background: "var(--surface-0)",
+              border: "1px solid var(--border-strong)",
               borderRadius: 8,
-              color: "#b0c2d8",
+              color: "var(--text-soft)",
               padding: "9px 10px",
               fontSize: 11,
               marginBottom: 12,
@@ -930,8 +1192,8 @@ export default function Tracker({ user }) {
               onClick={() => window.location.reload()}
               style={{
                 flex: 1,
-                background: "#1c2738",
-                color: "#d5e1ef",
+                background: "var(--border)",
+                color: "var(--text-primary)",
                 border: "none",
                 borderRadius: 8,
                 padding: "10px 12px",
@@ -945,8 +1207,8 @@ export default function Tracker({ user }) {
               onClick={() => signOut(auth)}
               style={{
                 flex: 1,
-                background: "#f43",
-                color: "#fff",
+                background: "var(--danger)",
+                color: "var(--danger-ink)",
                 border: "none",
                 borderRadius: 8,
                 padding: "10px 12px",
@@ -963,36 +1225,56 @@ export default function Tracker({ user }) {
   }
 
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div
+      style={{
+        height: "var(--app-height)",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden"
+      }}
+    >
       <div
         style={{
           padding: "12px 16px",
           paddingTop: "calc(12px + env(safe-area-inset-top, 0px))",
-          borderBottom: "1px solid #111a26",
+          borderBottom: "1px solid var(--surface-1)",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
           flexShrink: 0
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <button
+          onClick={openSettings}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            background: "transparent",
+            border: "none",
+            padding: 0,
+            color: "inherit",
+            cursor: "pointer",
+            textAlign: "left"
+          }}
+          title={t("settings.openTitle")}
+        >
           <AppLogo size={32} fontSize={11} />
           <div>
             <div style={{ fontWeight: 800, fontSize: 14, letterSpacing: -0.5 }}>
               {t("common.appName")}
             </div>
-            <div style={{ fontSize: 9, color: "#7b8fa9" }}>{user.displayName || user.email}</div>
+            <div style={{ fontSize: 9, color: "var(--text-subtle)" }}>{user.displayName || user.email}</div>
           </div>
-        </div>
+        </button>
 
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <LanguageSelector compact />
           {tab === "packages" && (
             <button
               onClick={() => setShowAddPkg(true)}
               style={{
-                background: "#0d3",
-                color: "#000",
+                background: "var(--accent)",
+                color: "var(--accent-ink)",
                 border: "none",
                 padding: "10px 16px",
                 borderRadius: 10,
@@ -1012,8 +1294,8 @@ export default function Tracker({ user }) {
                 setShowAddProd(true);
               }}
               style={{
-                background: "#0d3",
-                color: "#000",
+                background: "var(--accent)",
+                color: "var(--accent-ink)",
                 border: "none",
                 padding: "10px 16px",
                 borderRadius: 10,
@@ -1026,38 +1308,25 @@ export default function Tracker({ user }) {
             </button>
           )}
 
-          <button
-            onClick={() => signOut(auth)}
-            style={{
-              background: "#111a26",
-              border: "none",
-              color: "#95a8c0",
-              padding: "10px",
-              borderRadius: 10,
-              cursor: "pointer",
-              fontSize: 14
-            }}
-            title={t("header.logoutTitle")}
-          >
-            🚪
-          </button>
         </div>
       </div>
 
       <div
         style={{
           flex: 1,
+          minHeight: 0,
           overflowY: "auto",
           overflowX: "hidden",
+          WebkitOverflowScrolling: "touch",
           padding: 16,
-          paddingBottom: "calc(96px + env(safe-area-inset-bottom, 0px))"
+          paddingBottom: 20
         }}
       >
         {tab === "dashboard" && (
           <div style={{ animation: "fadeIn .2s ease", display: "flex", flexDirection: "column", gap: 12 }}>
             {packages.length === 0 && (
               <div style={{ textAlign: "center", padding: "30px 20px", marginTop: 16 }}>
-                <div style={{ fontSize: 13, color: "#7b8fa9", marginBottom: 14 }}>
+                <div style={{ fontSize: 13, color: "var(--text-subtle)", marginBottom: 14 }}>
                   {t("dashboard.firstPackagePrompt")}
                 </div>
                 <button
@@ -1074,11 +1343,11 @@ export default function Tracker({ user }) {
 
             {packages.length > 0 && (
               <>
-                <div style={{ background: "#111a26", border: "1px solid #1c2738", borderRadius: 14, padding: 14 }}>
+                <div style={{ background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: 14, padding: 14 }}>
                   <div
                     style={{
                       fontSize: 11,
-                      color: "#95a8c0",
+                      color: "var(--text-muted)",
                       textTransform: "uppercase",
                       letterSpacing: 1,
                       marginBottom: 10
@@ -1095,7 +1364,7 @@ export default function Tracker({ user }) {
                         revenue: currency(stats.totalRev),
                         cost: currency(stats.totalCost)
                       })}
-                      accent={stats.profit >= 0 ? "#0d3" : "#f43"}
+                      accent={stats.profit >= 0 ? "var(--accent)" : "var(--danger)"}
                     />
                     <StatCard
                       label={t("dashboard.roiAndMargin")}
@@ -1104,16 +1373,16 @@ export default function Tracker({ user }) {
                         margin: stats.marginRate.toFixed(0),
                         recovery: stats.recoveryRate.toFixed(0)
                       })}
-                      accent={stats.profit >= 0 ? "#0d3" : "#f43"}
+                      accent={stats.profit >= 0 ? "var(--accent)" : "var(--danger)"}
                     />
                     <StatCard
                       label={t("dashboard.activeCapital")}
                       value={currency(stats.activeCapital)}
                       sub={t("dashboard.activeProductsAndUnits", {
                         products: stats.activeProducts,
-                        units: stats.availableUnits
+                        units: unitCount(stats.availableUnits)
                       })}
-                      accent="#f90"
+                      accent="var(--alert)"
                     />
                     <StatCard
                       label={t("dashboard.rotation")}
@@ -1122,16 +1391,16 @@ export default function Tracker({ user }) {
                         sold: stats.soldCount,
                         total: stats.totalUnits
                       })}
-                      accent="#08f"
+                      accent="var(--info)"
                     />
                   </div>
                 </div>
 
-                <div style={{ background: "#111a26", border: "1px solid #1c2738", borderRadius: 14, padding: 14 }}>
+                <div style={{ background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: 14, padding: 14 }}>
                   <div
                     style={{
                       fontSize: 11,
-                      color: "#95a8c0",
+                      color: "var(--text-muted)",
                       textTransform: "uppercase",
                       letterSpacing: 1,
                       marginBottom: 10
@@ -1144,14 +1413,14 @@ export default function Tracker({ user }) {
                     <StatCard
                       label={t("dashboard.monthLabel", { month: stats.monthLabel })}
                       value={currency(stats.month.profit)}
-                      sub={`${currency(stats.month.revenue)} / ${currency(stats.month.cost)} · ${stats.month.soldUnits} ${t("common.unitShort")}`}
-                      accent={stats.month.profit >= 0 ? "#0d3" : "#f43"}
+                      sub={`${currency(stats.month.revenue)} / ${currency(stats.month.cost)} · ${unitCount(stats.month.soldUnits)}`}
+                      accent={stats.month.profit >= 0 ? "var(--accent)" : "var(--danger)"}
                     />
                     <StatCard
                       label={t("dashboard.yearLabel", { year: stats.yearLabel })}
                       value={currency(stats.year.profit)}
-                      sub={`${currency(stats.year.revenue)} / ${currency(stats.year.cost)} · ${stats.year.soldUnits} ${t("common.unitShort")}`}
-                      accent={stats.year.profit >= 0 ? "#0d3" : "#f43"}
+                      sub={`${currency(stats.year.revenue)} / ${currency(stats.year.cost)} · ${unitCount(stats.year.soldUnits)}`}
+                      accent={stats.year.profit >= 0 ? "var(--accent)" : "var(--danger)"}
                     />
                   </div>
 
@@ -1168,23 +1437,23 @@ export default function Tracker({ user }) {
                               justifyContent: "space-between",
                               alignItems: "center",
                               gap: 10,
-                              background: "#0d1420",
+                              background: "var(--surface-0)",
                               borderRadius: 8,
                               padding: "9px 10px"
                             }}
                           >
-                            <div style={{ fontSize: 11, color: "#c2d1e5" }}>{row.label}</div>
+                            <div style={{ fontSize: 11, color: "var(--text-soft)" }}>{row.label}</div>
                             <div style={{ textAlign: "right" }}>
                               <div
                                 style={{
                                   fontSize: 12,
                                   fontWeight: 800,
-                                  color: row.profit >= 0 ? "#0d3" : "#f43"
+                                  color: row.profit >= 0 ? "var(--accent)" : "var(--danger)"
                                 }}
                               >
                                 {currency(row.profit)}
                               </div>
-                              <div style={{ fontSize: 9, color: "#7b8fa9" }}>
+                              <div style={{ fontSize: 9, color: "var(--text-subtle)" }}>
                                 {currency(row.revenue)} / {currency(row.cost)}
                               </div>
                             </div>
@@ -1194,11 +1463,11 @@ export default function Tracker({ user }) {
                   )}
                 </div>
 
-                <div style={{ background: "#111a26", border: "1px solid #1c2738", borderRadius: 14, padding: 14 }}>
+                <div style={{ background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: 14, padding: 14 }}>
                   <div
                     style={{
                       fontSize: 11,
-                      color: "#95a8c0",
+                      color: "var(--text-muted)",
                       textTransform: "uppercase",
                       letterSpacing: 1,
                       marginBottom: 10
@@ -1212,19 +1481,19 @@ export default function Tracker({ user }) {
                       label={t("dashboard.pendingUnits")}
                       value={stats.pendingCount}
                       sub={t("dashboard.unitsToSell")}
-                      accent="#a855f7"
+                      accent="var(--violet)"
                     />
                     <StatCard
                       label={t("dashboard.avgTicketUnit")}
                       value={currency(stats.avgUnitRevenue)}
-                      sub={`${stats.soldCount} ${t("common.unitShort")} ${t("common.soldWordPlural")}`}
-                      accent="#08f"
+                      sub={`${unitCount(stats.soldCount)} ${t("common.soldWordPlural")}`}
+                      accent="var(--info)"
                     />
                     <StatCard
                       label={t("dashboard.avgTicketSale")}
                       value={currency(stats.avgProductRevenue)}
-                      sub={`${stats.soldProductsCount} ${t("common.productsWord")} ${t("common.soldWordPlural")}`}
-                      accent="#0d3"
+                      sub={`${productCount(stats.soldProductsCount)} ${t("common.soldWordPlural")}`}
+                      accent="var(--accent)"
                     />
                     <StatCard
                       label={t("dashboard.stockPotential")}
@@ -1236,120 +1505,83 @@ export default function Tracker({ user }) {
                             })
                           : t("dashboard.addTargetPriceHint")
                       }
-                      accent={stats.estimatedOpenProfit >= 0 ? "#0d3" : "#f90"}
+                      accent={stats.estimatedOpenProfit >= 0 ? "var(--accent)" : "var(--alert)"}
                     />
                   </div>
 
                   {staleProducts.length === 0 ? (
-                    <div style={{ fontSize: 11, color: "#7b8fa9", padding: "6px 2px" }}>
+                    <div style={{ fontSize: 11, color: "var(--text-subtle)", padding: "6px 2px" }}>
                       {t("alerts.noStaleProducts")}
                     </div>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      <div style={{ fontSize: 10, color: "#95a8c0", marginBottom: 2 }}>
-                        {staleProducts.filter((item) => item.alert.level === "critical").length > 0 && (
-                          <span style={{ color: "#f43" }}>
-                            🚨 {t("alerts.criticalCount", { count: staleProducts.filter((item) => item.alert.level === "critical").length })}{" "}
-                          </span>
-                        )}
-                        {staleProducts.filter((item) => item.alert.level === "urgent").length > 0 && (
-                          <span style={{ color: "#f90" }}>
-                            🔥 {t("alerts.urgentCount", { count: staleProducts.filter((item) => item.alert.level === "urgent").length })}{" "}
-                          </span>
-                        )}
-                        {staleProducts.filter((item) => item.alert.level === "warning").length > 0 && (
-                          <span style={{ color: "#fd0" }}>
-                            ⚠️ {t("alerts.warningCount", { count: staleProducts.filter((item) => item.alert.level === "warning").length })}
-                          </span>
-                        )}
+                      <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 2 }}>
+                        {t("alerts.reviewFoldersTitle")}
                       </div>
 
-                      {staleProducts.slice(0, 4).map((product) => {
-                        const estimatedCost = getCostPerProduct(product, packages, products);
-                        return (
-                          <div
-                            key={product.id}
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(auto-fit, minmax(132px, 1fr))",
+                          gap: 8
+                        }}
+                      >
+                        {reviewFolders.map((folder) => (
+                          <button
+                            key={folder.level}
+                            onClick={() => folder.count > 0 && setShowReviewLevel(folder.level)}
+                            disabled={folder.count === 0}
                             style={{
-                              background: product.alert.bg,
-                              border: `1px solid ${product.alert.border}`,
+                              background: folder.count > 0 ? folder.bg : "var(--surface-0)",
+                              border: `1px solid ${folder.count > 0 ? folder.border : "var(--border)"}`,
                               borderRadius: 10,
-                              padding: "11px 12px"
+                              padding: "10px 11px",
+                              textAlign: "left",
+                              cursor: folder.count > 0 ? "pointer" : "default",
+                              opacity: folder.count > 0 ? 1 : 0.62
                             }}
                           >
                             <div
                               style={{
                                 display: "flex",
                                 justifyContent: "space-between",
-                                alignItems: "flex-start",
-                                gap: 8
+                                alignItems: "center",
+                                gap: 10,
+                                marginBottom: 5
                               }}
                             >
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div
-                                  style={{
-                                    fontWeight: 700,
-                                    fontSize: 13,
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap"
-                                  }}
-                                >
-                                  {product.alert.icon} {product.name}
-                                </div>
-                                <div style={{ fontSize: 10, color: "#b0c2d8", marginTop: 3 }}>
-                                  {product.alert.daysSince}d · {product.alert.message}
-                                </div>
-                                <div style={{ fontSize: 10, color: "#95a8c0", marginTop: 2 }}>
-                                  {t("dashboard.estimatedCost", { cost: currency(estimatedCost) })}
-                                </div>
-                              </div>
-                              <button
-                                onClick={() => openSellModal(product.id)}
+                              <span style={{ fontSize: 11, color: folder.color, fontWeight: 700 }}>
+                                📁 {folder.icon} {t("alerts.folderLabel", { days: folder.days })}
+                              </span>
+                              <span
                                 style={{
-                                  background: product.alert.color,
-                                  color: "#000",
-                                  border: "none",
-                                  padding: "8px 10px",
-                                  borderRadius: 8,
+                                  fontSize: 16,
                                   fontWeight: 800,
-                                  fontSize: 11,
-                                  cursor: "pointer",
-                                  whiteSpace: "nowrap",
-                                  flexShrink: 0
+                                  color: folder.count > 0 ? "var(--text-primary)" : "var(--text-subtle)"
                                 }}
                               >
-                                💰 {t("common.sell")}
-                              </button>
+                                {folder.count}
+                              </span>
                             </div>
-                          </div>
-                        );
-                      })}
+                            <div style={{ fontSize: 9, color: "var(--text-soft)" }}>
+                              {t("alerts.pendingCount", { count: folder.count })}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
 
-                      {staleProducts.length > 4 && (
-                        <button
-                          onClick={() => setTab("products")}
-                          style={{
-                            background: "#1c2738",
-                            border: "none",
-                            color: "#c2d1e5",
-                            padding: 10,
-                            borderRadius: 8,
-                            fontSize: 11,
-                            cursor: "pointer"
-                          }}
-                        >
-                          {t("dashboard.seeMore", { count: staleProducts.length - 4 })}
-                        </button>
-                      )}
+                      <div style={{ fontSize: 10, color: "var(--text-subtle)", marginTop: 2 }}>
+                        {t("alerts.reviewedHint")}
+                      </div>
                     </div>
                   )}
                 </div>
 
-                <div style={{ background: "#111a26", border: "1px solid #1c2738", borderRadius: 14, padding: 14 }}>
+                <div style={{ background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: 14, padding: 14 }}>
                   <div
                     style={{
                       fontSize: 11,
-                      color: "#95a8c0",
+                      color: "var(--text-muted)",
                       textTransform: "uppercase",
                       letterSpacing: 1,
                       marginBottom: 10
@@ -1365,23 +1597,23 @@ export default function Tracker({ user }) {
                     ].map((item) => (
                       <div
                         key={item.label}
-                        style={{ flex: 1, background: "#0d1420", borderRadius: 10, padding: 12 }}
+                        style={{ flex: 1, background: "var(--surface-0)", borderRadius: 10, padding: 12 }}
                       >
-                        <div style={{ fontSize: 10, color: "#b0c2d8", marginBottom: 2 }}>{item.label}</div>
-                        <div style={{ fontSize: 10, color: "#7b8fa9" }}>
+                        <div style={{ fontSize: 10, color: "var(--text-soft)", marginBottom: 2 }}>{item.label}</div>
+                        <div style={{ fontSize: 10, color: "var(--text-subtle)" }}>
                           {t("dashboard.packagesCount", { count: item.data.count })}
                         </div>
                         <div
                           style={{
                             fontSize: 19,
                             fontWeight: 800,
-                            color: item.data.profit >= 0 ? "#0d3" : "#f43",
+                            color: item.data.profit >= 0 ? "var(--accent)" : "var(--danger)",
                             marginTop: 6
                           }}
                         >
                           {currency(item.data.profit)}
                         </div>
-                        <div style={{ fontSize: 9, color: "#7b8fa9" }}>
+                        <div style={{ fontSize: 9, color: "var(--text-subtle)" }}>
                           {item.data.count > 0
                             ? t("dashboard.perPackage", {
                                 value: currency(item.data.profit / item.data.count)
@@ -1398,7 +1630,7 @@ export default function Tracker({ user }) {
                         <div
                           style={{
                             fontSize: 10,
-                            color: "#95a8c0",
+                            color: "var(--text-muted)",
                             textTransform: "uppercase",
                             letterSpacing: 1,
                             marginBottom: 8
@@ -1406,7 +1638,7 @@ export default function Tracker({ user }) {
                         >
                           {t("dashboard.topCategories")}
                         </div>
-                        <MiniBar data={chartCategoryData.slice(0, 5)} color="#08f" />
+                        <MiniBar data={chartCategoryData.slice(0, 5)} color="var(--info)" />
                       </div>
                     )}
 
@@ -1415,7 +1647,7 @@ export default function Tracker({ user }) {
                         <div
                           style={{
                             fontSize: 10,
-                            color: "#95a8c0",
+                            color: "var(--text-muted)",
                             textTransform: "uppercase",
                             letterSpacing: 1,
                             marginBottom: 8
@@ -1423,7 +1655,7 @@ export default function Tracker({ user }) {
                         >
                           {t("dashboard.revenueByPlatform")}
                         </div>
-                        <MiniBar data={chartPlatformData} color="#a855f7" />
+                        <MiniBar data={chartPlatformData} color="var(--violet)" />
                       </div>
                     )}
                   </div>
@@ -1445,9 +1677,9 @@ export default function Tracker({ user }) {
                       pkgSelectionMode ? clearPackageBatchSelection() : setPkgSelectionMode(true)
                     }
                     style={{
-                      background: pkgSelectionMode ? "#f43" : "#1c2738",
+                      background: pkgSelectionMode ? "var(--danger)" : "var(--border)",
                       border: "none",
-                      color: pkgSelectionMode ? "#fff" : "#c2d1e5",
+                      color: pkgSelectionMode ? "var(--danger-ink)" : "var(--text-soft)",
                       padding: "10px 12px",
                       borderRadius: 8,
                       fontWeight: 700,
@@ -1462,9 +1694,9 @@ export default function Tracker({ user }) {
                     <button
                       onClick={deleteSelectedPackages}
                       style={{
-                        background: "#f43",
+                        background: "var(--danger)",
                         border: "none",
-                        color: "#fff",
+                        color: "var(--danger-ink)",
                         padding: "10px 12px",
                         borderRadius: 8,
                         fontWeight: 800,
@@ -1477,7 +1709,7 @@ export default function Tracker({ user }) {
                   )}
 
                   {pkgSelectionMode && (
-                    <div style={{ fontSize: 10, color: "#95a8c0", marginLeft: "auto" }}>
+                    <div style={{ fontSize: 10, color: "var(--text-muted)", marginLeft: "auto" }}>
                       {t("packages.selectedCount", { count: selectedPackageIds.size })}
                     </div>
                   )}
@@ -1506,12 +1738,12 @@ export default function Tracker({ user }) {
                       key={pkg.id}
                       onClick={pkgSelectionMode ? () => togglePackageSelection(pkg.id) : undefined}
                       style={{
-                        background: isSelected ? "#112417" : "#111a26",
-                        border: `1px solid ${isSelected ? "#0d3" : "#1c2738"}`,
+                        background: isSelected ? "var(--surface-3)" : "var(--surface-1)",
+                        border: `1px solid ${isSelected ? "var(--accent)" : "var(--border)"}`,
                         borderRadius: 14,
                         padding: "14px 16px",
                         cursor: pkgSelectionMode ? "pointer" : "default",
-                        boxShadow: isSelected ? "0 0 0 1px rgba(0,221,51,.4) inset" : "none",
+                        boxShadow: isSelected ? "0 0 0 1px rgba(216,176,111,.45) inset" : "none",
                         transition: "background .15s ease, border-color .15s ease, box-shadow .15s ease"
                       }}
                     >
@@ -1529,7 +1761,7 @@ export default function Tracker({ user }) {
                             <span
                               style={{
                                 fontSize: 11,
-                                color: isSelected ? "#0d3" : "#7b8fa9",
+                                color: isSelected ? "var(--accent)" : "var(--text-subtle)",
                                 fontWeight: 700
                               }}
                             >
@@ -1548,13 +1780,13 @@ export default function Tracker({ user }) {
                           <div
                             style={{
                               fontWeight: 800,
-                              color: revenue > 0 ? (profit >= 0 ? "#0d3" : "#f43") : "#304560",
+                              color: revenue > 0 ? (profit >= 0 ? "var(--accent)" : "var(--danger)") : "var(--border-strong)",
                               fontSize: 15
                             }}
                           >
                             {revenue > 0 ? `${profit >= 0 ? "+" : ""}${currency(profit)}` : "—"}
                           </div>
-                          <div style={{ fontSize: 10, color: "#7b8fa9" }}>
+                          <div style={{ fontSize: 10, color: "var(--text-subtle)" }}>
                             {t("packages.soldUnits", { sold: soldUnits, total: totalUnits })}
                           </div>
                         </div>
@@ -1569,8 +1801,8 @@ export default function Tracker({ user }) {
                             }}
                             style={{
                               flex: 1,
-                              background: isSelected ? "#0d3" : "#1c2738",
-                              color: isSelected ? "#001a00" : "#c2d1e5",
+                              background: isSelected ? "var(--accent)" : "var(--border)",
+                              color: isSelected ? "var(--accent-ink)" : "var(--text-soft)",
                               border: "none",
                               padding: 10,
                               borderRadius: 8,
@@ -1590,9 +1822,9 @@ export default function Tracker({ user }) {
                               }}
                               style={{
                                 flex: 1,
-                                background: "#1c2738",
+                                background: "var(--border)",
                                 border: "none",
-                                color: "#08f",
+                                color: "var(--info)",
                                 padding: 10,
                                 borderRadius: 8,
                                 fontWeight: 700,
@@ -1610,9 +1842,9 @@ export default function Tracker({ user }) {
                                 setShowAddProd(true);
                               }}
                               style={{
-                                background: "#1c2738",
+                                background: "var(--border)",
                                 border: "none",
-                                color: "#0d3",
+                                color: "var(--accent)",
                                 padding: "10px 14px",
                                 borderRadius: 8,
                                 fontSize: 12,
@@ -1628,9 +1860,9 @@ export default function Tracker({ user }) {
                                 openEditPackage(pkg);
                               }}
                               style={{
-                                background: "#1c2738",
+                                background: "var(--border)",
                                 border: "none",
-                                color: "#08f",
+                                color: "var(--info)",
                                 padding: "10px 14px",
                                 borderRadius: 8,
                                 fontSize: 12,
@@ -1648,9 +1880,9 @@ export default function Tracker({ user }) {
                                 }
                               }}
                               style={{
-                                background: "#1c2738",
+                                background: "var(--border)",
                                 border: "none",
-                                color: "#f43",
+                                color: "var(--danger)",
                                 padding: "10px 14px",
                                 borderRadius: 8,
                                 fontSize: 12,
@@ -1685,9 +1917,9 @@ export default function Tracker({ user }) {
               <button
                 onClick={() => (selectionMode ? clearBatchSelection() : setSelectionMode(true))}
                 style={{
-                  background: selectionMode ? "#f43" : "#1c2738",
+                  background: selectionMode ? "var(--danger)" : "var(--border)",
                   border: "none",
-                  color: selectionMode ? "#fff" : "#c2d1e5",
+                  color: selectionMode ? "var(--danger-ink)" : "var(--text-soft)",
                   padding: "10px 12px",
                   borderRadius: 8,
                   fontWeight: 700,
@@ -1702,9 +1934,9 @@ export default function Tracker({ user }) {
                 <button
                   onClick={deleteSelectedProducts}
                   style={{
-                    background: "#f43",
+                    background: "var(--danger)",
                     border: "none",
-                    color: "#fff",
+                    color: "var(--danger-ink)",
                     padding: "10px 12px",
                     borderRadius: 8,
                     fontWeight: 800,
@@ -1717,7 +1949,7 @@ export default function Tracker({ user }) {
               )}
 
               {selectionMode && (
-                <div style={{ fontSize: 10, color: "#95a8c0", marginLeft: "auto" }}>
+                <div style={{ fontSize: 10, color: "var(--text-muted)", marginLeft: "auto" }}>
                   {t("packages.selectedCount", { count: selectedProductIds.size })}
                 </div>
               )}
@@ -1725,17 +1957,18 @@ export default function Tracker({ user }) {
 
             <div
               style={{
-                background: "#101826",
-                border: "1px solid #1f2b3d",
+                background: "var(--surface-2)",
+                border: "1px solid var(--border)",
                 borderRadius: 10,
                 padding: "8px 10px",
                 marginBottom: 12,
                 fontSize: 10,
-                color: "#95a8c0"
+                color: "var(--text-muted)"
               }}
             >
-              {t("products.ageLegend")} <span style={{ color: "#fd0" }}>14d</span> ·{" "}
-              <span style={{ color: "#f90" }}>28d</span> · <span style={{ color: "#f43" }}>42d+</span>
+              {t("products.ageLegend")} <span style={{ color: "var(--info)" }}>7d</span> ·{" "}
+              <span style={{ color: "var(--warning)" }}>14d</span> ·{" "}
+              <span style={{ color: "var(--alert)" }}>28d</span> · <span style={{ color: "var(--danger)" }}>42d+</span>
             </div>
 
             {filteredProducts.length === 0 ? (
@@ -1745,7 +1978,7 @@ export default function Tracker({ user }) {
               />
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <div style={{ background: "#101826", border: "1px solid #1f2b3d", borderRadius: 14, padding: 12 }}>
+                <div style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 14, padding: 12 }}>
                   <div
                     style={{
                       display: "flex",
@@ -1755,13 +1988,13 @@ export default function Tracker({ user }) {
                     }}
                   >
                     <div style={{ fontWeight: 800, fontSize: 12 }}>🟢 {t("products.listedTitle")}</div>
-                    <div style={{ fontSize: 10, color: "#b0c2d8" }}>
+                    <div style={{ fontSize: 10, color: "var(--text-soft)" }}>
                       {t("products.itemsCount", { count: productsForSale.length })}
                     </div>
                   </div>
 
                   {productsForSale.length === 0 ? (
-                    <div style={{ fontSize: 11, color: "#7b8fa9", textAlign: "center", padding: 16 }}>
+                    <div style={{ fontSize: 11, color: "var(--text-subtle)", textAlign: "center", padding: 16 }}>
                       {t("products.noListedProducts")}
                     </div>
                   ) : (
@@ -1771,7 +2004,7 @@ export default function Tracker({ user }) {
                   )}
                 </div>
 
-                <div style={{ background: "#101826", border: "1px solid #1f2b3d", borderRadius: 14, padding: 12 }}>
+                <div style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 14, padding: 12 }}>
                   <div
                     style={{
                       display: "flex",
@@ -1781,13 +2014,13 @@ export default function Tracker({ user }) {
                     }}
                   >
                     <div style={{ fontWeight: 800, fontSize: 12 }}>✅ {t("products.soldTitle")}</div>
-                    <div style={{ fontSize: 10, color: "#b0c2d8" }}>
+                    <div style={{ fontSize: 10, color: "var(--text-soft)" }}>
                       {t("products.itemsCount", { count: productsSold.length })}
                     </div>
                   </div>
 
                   {productsSold.length === 0 ? (
-                    <div style={{ fontSize: 11, color: "#7b8fa9", textAlign: "center", padding: 16 }}>
+                    <div style={{ fontSize: 11, color: "var(--text-subtle)", textAlign: "center", padding: 16 }}>
                       {t("products.noSoldProducts")}
                     </div>
                   ) : (
@@ -1804,20 +2037,16 @@ export default function Tracker({ user }) {
 
       <div
         style={{
-          position: "fixed",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          background: "#0d1420",
-          borderTop: "1px solid #1c2738",
+          background: "var(--surface-0)",
+          borderTop: "1px solid var(--border)",
           display: "flex",
           justifyContent: "space-around",
-          alignItems: "center",
+          alignItems: "flex-end",
           boxSizing: "border-box",
-          paddingBottom: "env(safe-area-inset-bottom, 0px)",
-          height: "calc(64px + env(safe-area-inset-bottom, 0px))",
-          flexShrink: 0,
-          zIndex: 100
+          paddingTop: 8,
+          paddingBottom: "calc(8px + env(safe-area-inset-bottom, 0px))",
+          minHeight: "calc(64px + env(safe-area-inset-bottom, 0px))",
+          flexShrink: 0
         }}
       >
         {tabList.map((tabItem) => (
@@ -1834,7 +2063,7 @@ export default function Tracker({ user }) {
               justifyContent: "center",
               gap: 4,
               padding: "8px 20px",
-              color: tab === tabItem.id ? "#0d3" : "#95a8c0",
+              color: tab === tabItem.id ? "var(--accent)" : "var(--text-muted)",
               transition: "color .2s",
               lineHeight: 1
             }}
@@ -1844,6 +2073,335 @@ export default function Tracker({ user }) {
           </button>
         ))}
       </div>
+
+      <Modal
+        open={!!showReviewLevel}
+        onClose={() => setShowReviewLevel(null)}
+        title={
+          activeReviewFolder
+            ? t("alerts.reviewScreenTitle", { days: activeReviewFolder.days })
+            : t("alerts.reviewScreenGeneric")
+        }
+      >
+        {!activeReviewFolder || activeReviewFolder.count === 0 ? (
+          <div style={{ fontSize: 12, color: "var(--text-muted)", padding: "4px 2px 8px" }}>
+            {t("alerts.reviewScreenEmpty")}
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ fontSize: 11, color: activeReviewFolder.color, fontWeight: 700, marginBottom: 2 }}>
+              {activeReviewFolder.icon} {t("alerts.pendingCount", { count: activeReviewFolder.count })}
+            </div>
+
+            {activeReviewFolder.items.map((product) => {
+              const estimatedCost = getCostPerProduct(product, packages, products);
+              const reviewDropSuggestions = getPriceDropSuggestions(product, product.alert);
+              const reviewDropSuggestionText = reviewDropSuggestions
+                .map((item) =>
+                  t("alerts.dropSuggestionItem", {
+                    percent: item.percent,
+                    price: currency(item.unitPrice)
+                  })
+                )
+                .join(" · ");
+              const isReviewing = reviewingProductIds.has(product.id);
+
+              return (
+                <div
+                  key={product.id}
+                  style={{
+                    background: product.alert.bg,
+                    border: `1px solid ${product.alert.border}`,
+                    borderRadius: 10,
+                    padding: "11px 12px"
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      gap: 8
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          fontSize: 13,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap"
+                        }}
+                      >
+                        {product.alert.icon} {product.name}
+                      </div>
+                      <div style={{ fontSize: 10, color: "var(--text-soft)", marginTop: 3 }}>
+                        {product.alert.daysSince}d · {product.alert.message}
+                      </div>
+                      <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
+                        {t("dashboard.estimatedCost", { cost: currency(estimatedCost) })}
+                      </div>
+                      {reviewDropSuggestionText && (
+                        <div style={{ fontSize: 10, color: "var(--text-soft)", marginTop: 2 }}>
+                          {t("alerts.dropSuggestionPrefix")} {reviewDropSuggestionText}
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                      <button
+                        onClick={() => {
+                          setShowReviewLevel(null);
+                          setTimeout(() => openSellModal(product.id), 80);
+                        }}
+                        style={{
+                          background: "var(--accent)",
+                          color: "var(--accent-ink)",
+                          border: "none",
+                          padding: "8px 10px",
+                          borderRadius: 8,
+                          fontWeight: 800,
+                          fontSize: 11,
+                          cursor: "pointer",
+                          whiteSpace: "nowrap"
+                        }}
+                      >
+                        💰 {t("common.sell")}
+                      </button>
+
+                      <button
+                        onClick={() => markProductReviewed(product)}
+                        disabled={isReviewing}
+                        style={{
+                          background: "var(--surface-1)",
+                          color: product.alert.color,
+                          border: `1px solid ${product.alert.border}`,
+                          padding: "8px 10px",
+                          borderRadius: 8,
+                          fontWeight: 800,
+                          fontSize: 11,
+                          cursor: isReviewing ? "default" : "pointer",
+                          opacity: isReviewing ? 0.7 : 1,
+                          whiteSpace: "nowrap"
+                        }}
+                      >
+                        ✅ {isReviewing ? t("alerts.reviewingButton") : t("alerts.reviewedButton")}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={showSettings} onClose={() => setShowSettings(false)} title={t("settings.title")}>
+        <div
+          style={{
+            background: "var(--surface-2)",
+            border: "1px solid var(--border)",
+            borderRadius: 12,
+            padding: 12,
+            marginBottom: 12
+          }}
+        >
+          <div
+            style={{
+              fontSize: 10,
+              color: "var(--text-muted)",
+              textTransform: "uppercase",
+              letterSpacing: 1,
+              marginBottom: 10
+            }}
+          >
+            🌐 {t("settings.languageTitle")}
+          </div>
+          <LanguageSelector />
+        </div>
+
+        <div
+          style={{
+            background: "var(--surface-2)",
+            border: "1px solid var(--border)",
+            borderRadius: 12,
+            padding: 12,
+            marginBottom: 12
+          }}
+        >
+          <div
+            style={{
+              fontSize: 10,
+              color: "var(--text-muted)",
+              textTransform: "uppercase",
+              letterSpacing: 1,
+              marginBottom: 10
+            }}
+          >
+            👤 {t("settings.profileTitle")}
+          </div>
+
+          <Field label={t("settings.displayNameLabel")}>
+            <input
+              value={settingsName}
+              onChange={(event) => setSettingsName(event.target.value)}
+              placeholder={t("settings.displayNamePlaceholder")}
+              style={inputS}
+            />
+          </Field>
+
+          <Field label={t("settings.currentEmailLabel")}>
+            <input value={user.email || "—"} readOnly style={{ ...inputS, color: "var(--text-soft)" }} />
+          </Field>
+
+          <button
+            onClick={saveDisplayName}
+            disabled={settingsBusy}
+            style={{
+              ...btnP,
+              opacity: settingsBusy ? 0.55 : 1,
+              marginTop: 2
+            }}
+          >
+            {t("settings.saveProfileButton")}
+          </button>
+        </div>
+
+        <div
+          style={{
+            background: "var(--surface-2)",
+            border: "1px solid var(--border)",
+            borderRadius: 12,
+            padding: 12
+          }}
+        >
+          <div
+            style={{
+              fontSize: 10,
+              color: "var(--text-muted)",
+              textTransform: "uppercase",
+              letterSpacing: 1,
+              marginBottom: 10
+            }}
+          >
+            🔐 {t("settings.securityTitle")}
+          </div>
+
+          <Field label={t("settings.newEmailLabel")}>
+            <input
+              type="email"
+              value={settingsEmail}
+              onChange={(event) => setSettingsEmail(event.target.value)}
+              placeholder={t("settings.newEmailPlaceholder")}
+              style={inputS}
+              autoCapitalize="none"
+            />
+          </Field>
+
+          {hasPasswordProvider && (
+            <Field label={t("settings.currentPasswordLabel")}>
+              <input
+                type="password"
+                value={settingsCurrentPassword}
+                onChange={(event) => setSettingsCurrentPassword(event.target.value)}
+                placeholder={t("settings.currentPasswordPlaceholder")}
+                style={inputS}
+              />
+            </Field>
+          )}
+
+          <button
+            onClick={saveEmail}
+            disabled={settingsBusy}
+            style={{
+              ...btnP,
+              opacity: settingsBusy ? 0.55 : 1,
+              marginBottom: hasPasswordProvider ? 10 : 0
+            }}
+          >
+            {t("settings.saveEmailButton")}
+          </button>
+
+          {hasPasswordProvider ? (
+            <>
+              <Field label={t("settings.newPasswordLabel")}>
+                <input
+                  type="password"
+                  value={settingsNewPassword}
+                  onChange={(event) => setSettingsNewPassword(event.target.value)}
+                  placeholder={t("settings.newPasswordPlaceholder")}
+                  style={inputS}
+                />
+              </Field>
+
+              <button
+                onClick={savePassword}
+                disabled={settingsBusy}
+                style={{ ...btnP, opacity: settingsBusy ? 0.55 : 1 }}
+              >
+                {t("settings.savePasswordButton")}
+              </button>
+            </>
+          ) : (
+            <div style={{ fontSize: 11, color: "var(--text-subtle)", marginTop: 10 }}>
+              {t("settings.passwordNotAvailable")}
+            </div>
+          )}
+        </div>
+
+        <button
+          onClick={() => {
+            setShowSettings(false);
+            signOut(auth);
+          }}
+          style={{
+            width: "100%",
+            marginTop: 12,
+            background: "var(--danger)",
+            color: "var(--danger-ink)",
+            border: "none",
+            borderRadius: 10,
+            padding: "12px 14px",
+            fontWeight: 800,
+            cursor: "pointer"
+          }}
+        >
+          🚪 {t("common.signOut")}
+        </button>
+
+        {settingsError && (
+          <div
+            style={{
+              background: "rgba(118,40,62,.24)",
+              border: "1px solid rgba(200,106,130,.45)",
+              borderRadius: 10,
+              padding: "10px 14px",
+              fontSize: 12,
+              color: "var(--danger)",
+              marginTop: 12
+            }}
+          >
+            {settingsError}
+          </div>
+        )}
+
+        {settingsSuccess && (
+          <div
+            style={{
+              background: "rgba(84,60,104,.25)",
+              border: "1px solid rgba(216,176,111,.45)",
+              borderRadius: 10,
+              padding: "10px 14px",
+              fontSize: 12,
+              color: "var(--accent-strong)",
+              marginTop: 12
+            }}
+          >
+            {settingsSuccess}
+          </div>
+        )}
+      </Modal>
 
       <Modal open={showAddPkg} onClose={() => setShowAddPkg(false)} title={t("packages.newPackage")}>
         <Field label={t("packages.purchaseDate")}>
@@ -1865,13 +2423,14 @@ export default function Tracker({ user }) {
               : "")
           }
         >
-          <input
+          <NumberInput
             type="number"
             step="0.5"
-            placeholder={suggestedCost ? String(suggestedCost) : "€"}
+            placeholder={suggestedCost ? String(suggestedCost) : ""}
             value={pkgCost}
             onChange={(event) => setPkgCost(event.target.value)}
             style={inputS}
+            unit="€"
           />
         </Field>
 
@@ -1882,8 +2441,8 @@ export default function Tracker({ user }) {
               onClick={() => setPkgQty(String(amount))}
               style={{
                 flex: 1,
-                background: pkgQtyNum === amount ? "#0d3" : "#1c2738",
-                color: pkgQtyNum === amount ? "#000" : "#c2d1e5",
+                background: pkgQtyNum === amount ? "var(--accent)" : "var(--border)",
+                color: pkgQtyNum === amount ? "var(--accent-ink)" : "var(--text-soft)",
                 border: "none",
                 padding: "8px 0",
                 borderRadius: 8,
@@ -1899,7 +2458,7 @@ export default function Tracker({ user }) {
 
         <div style={{ display: "flex", gap: 8 }}>
           <Field label={t("packages.packageCount")}>
-            <input
+            <NumberInput
               type="number"
               min="1"
               max="200"
@@ -1907,10 +2466,11 @@ export default function Tracker({ user }) {
               value={pkgQty}
               onChange={(event) => setPkgQty(event.target.value)}
               style={inputS}
+              unit={t("common.unitShort")}
             />
           </Field>
           <Field label={t("common.totalEstimate")}>
-            <input value={currency(pkgTotalEstimate || 0)} readOnly style={{ ...inputS, color: "#b0c2d8" }} />
+            <input value={currency(pkgTotalEstimate || 0)} readOnly style={{ ...inputS, color: "var(--text-soft)" }} />
           </Field>
         </div>
 
@@ -1947,7 +2507,7 @@ export default function Tracker({ user }) {
               />
             </Field>
             <Field label={t("packages.costPerPackageLabel")}>
-              <input
+              <NumberInput
                 type="number"
                 step="0.5"
                 min="0"
@@ -1959,6 +2519,7 @@ export default function Tracker({ user }) {
                   }))
                 }
                 style={inputS}
+                unit="€"
               />
             </Field>
             <Field label={t("common.notesOptional")}>
@@ -2029,24 +2590,26 @@ export default function Tracker({ user }) {
 
         <div style={{ display: "flex", gap: 8 }}>
           <Field label={t("products.quantity")}>
-            <input
+            <NumberInput
               type="number"
               min="1"
               step="1"
               value={prodQty}
               onChange={(event) => setProdQty(event.target.value)}
               style={inputS}
+              unit={t("common.unitShort")}
             />
           </Field>
 
           <Field label={t("products.targetUnitPrice")}>
-            <input
+            <NumberInput
               type="number"
               step="0.5"
               placeholder={t("products.targetPricePlaceholder")}
               value={prodEst}
               onChange={(event) => setProdEst(event.target.value)}
               style={inputS}
+              unit="€"
             />
           </Field>
         </div>
@@ -2081,19 +2644,43 @@ export default function Tracker({ user }) {
             {selectedPackageProducts.map((product) => {
               const quantity = getProductQuantity(product);
               const soldQty = getSoldQuantity(product);
+              const alert = getAlertLevel(
+                product,
+                t,
+                selectedPackage?.date || packageDateById[product.packageId] || null
+              );
+              const packageDropSuggestions = getPriceDropSuggestions(product, alert);
+              const packageDropSuggestionText = packageDropSuggestions
+                .map((item) =>
+                  t("alerts.dropSuggestionItem", {
+                    percent: item.percent,
+                    price: currency(item.unitPrice)
+                  })
+                )
+                .join(" · ");
 
               return (
                 <div
                   key={product.id}
                   style={{
-                    background: "#111a26",
-                    border: "1px solid #1c2738",
+                    background: alert ? alert.bg : "var(--surface-1)",
+                    border: `1px solid ${alert ? alert.border : "var(--border)"}`,
                     borderRadius: 10,
                     padding: "12px 14px"
                   }}
                 >
                   <div style={{ fontWeight: 700, fontSize: 13 }}>{product.name}</div>
-                  <div style={{ fontSize: 10, color: "#b0c2d8", marginTop: 3 }}>
+                  {alert && (
+                    <div style={{ fontSize: 10, color: alert.color, marginTop: 3, fontWeight: 700 }}>
+                      {alert.icon} {alert.daysSince}d · {alert.message}
+                    </div>
+                  )}
+                  {packageDropSuggestionText && (
+                    <div style={{ fontSize: 10, color: "var(--text-soft)", marginTop: 2 }}>
+                      {t("alerts.dropSuggestionPrefix")} {packageDropSuggestionText}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 10, color: "var(--text-soft)", marginTop: 3 }}>
                     {categoryLabel(product.category)} · {soldQty}/{quantity} {t("common.unitShort")} {t("common.soldWordPlural")}
                   </div>
                   <div
@@ -2112,8 +2699,8 @@ export default function Tracker({ user }) {
                         <button
                           onClick={() => openSellModal(product.id)}
                           style={{
-                            background: "#0d3",
-                            color: "#000",
+                            background: "var(--accent)",
+                            color: "var(--accent-ink)",
                             border: "none",
                             padding: "8px 10px",
                             borderRadius: 8,
@@ -2128,8 +2715,8 @@ export default function Tracker({ user }) {
                       <button
                         onClick={() => openEditProduct(product)}
                         style={{
-                          background: "#1c2738",
-                          color: "#08f",
+                          background: "var(--border)",
+                          color: "var(--info)",
                           border: "none",
                           padding: "8px 10px",
                           borderRadius: 8,
@@ -2150,7 +2737,7 @@ export default function Tracker({ user }) {
 
       <Modal open={!!showSell} onClose={() => setShowSell(null)} title={t("sale.registerSale")}>
         {currentSellProduct && (
-          <div style={{ fontSize: 11, color: "#b0c2d8", marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: "var(--text-soft)", marginBottom: 12 }}>
             {t("sale.availableUnits", {
               name: currentSellProduct.name,
               units: sellAvailableQty
@@ -2165,7 +2752,7 @@ export default function Tracker({ user }) {
               : t("sale.quantityToSell")
           }
         >
-          <input
+          <NumberInput
             type="number"
             min="1"
             max={sellAvailableQty || 1}
@@ -2173,22 +2760,24 @@ export default function Tracker({ user }) {
             value={sellQty}
             onChange={(event) => setSellQty(event.target.value)}
             style={inputS}
+            unit={t("common.unitShort")}
           />
         </Field>
 
         <Field label={t("sale.unitPrice")}>
-          <input
+          <NumberInput
             type="number"
             step="0.5"
             placeholder={t("sale.unitPricePlaceholder")}
             value={sellPrice}
             onChange={(event) => setSellPrice(event.target.value)}
             style={inputS}
+            unit="€"
           />
         </Field>
 
         {sellPreviewTotal > 0 && (
-          <div style={{ fontSize: 11, color: "#95a8c0", marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 10 }}>
             {t("sale.estimatedTotal", {
               total: currency(sellPreviewTotal),
               qty: sellQtyNum
@@ -2306,7 +2895,7 @@ export default function Tracker({ user }) {
 
             <div style={{ display: "flex", gap: 8 }}>
               <Field label={t("products.units")}>
-                <input
+                <NumberInput
                   type="number"
                   min="1"
                   step="1"
@@ -2315,11 +2904,12 @@ export default function Tracker({ user }) {
                     setEditProduct((previous) => ({ ...previous, quantity: event.target.value }))
                   }
                   style={inputS}
+                  unit={t("common.unitShort")}
                 />
               </Field>
 
               <Field label={t("products.targetUnitPrice")}>
-                <input
+                <NumberInput
                   type="number"
                   step="0.5"
                   value={editProduct.estPrice}
@@ -2327,19 +2917,20 @@ export default function Tracker({ user }) {
                     setEditProduct((previous) => ({ ...previous, estPrice: event.target.value }))
                   }
                   style={inputS}
+                  unit="€"
                 />
               </Field>
             </div>
 
             {editIsSold && (
               <>
-                <div style={{ fontSize: 11, color: "#95a8c0", marginBottom: 10 }}>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 10 }}>
                   {t("products.saleData")}
                 </div>
 
                 <div style={{ display: "flex", gap: 8 }}>
                   <Field label={t("products.saleUnitPrice")}>
-                    <input
+                    <NumberInput
                       type="number"
                       step="0.5"
                       value={editProduct.soldUnitPrice}
@@ -2350,12 +2941,13 @@ export default function Tracker({ user }) {
                         }))
                       }
                       style={inputS}
+                      unit="€"
                     />
                   </Field>
                   <Field label={t("products.saleTotal")}>
                     <input
                       value={currency(editSoldTotalPreview)}
-                      style={{ ...inputS, color: "#b0c2d8" }}
+                      style={{ ...inputS, color: "var(--text-soft)" }}
                       readOnly
                     />
                   </Field>
