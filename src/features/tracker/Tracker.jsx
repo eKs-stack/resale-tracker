@@ -1470,7 +1470,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
         style={{
           flex: 1,
           padding: 16,
-          paddingBottom: 20
+          paddingBottom: "calc(92px + var(--safe-bottom))"
         }}
       >
         {tab === "dashboard" && (
@@ -2188,7 +2188,9 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
 
       <div
         style={{
-          position: "sticky",
+          position: "fixed",
+          left: 0,
+          right: 0,
           bottom: 0,
           background: "var(--surface-0)",
           borderTop: "1px solid var(--border)",
