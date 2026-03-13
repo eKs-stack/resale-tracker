@@ -40,6 +40,35 @@ export default function App() {
     }
   }, [theme]);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") return;
+
+    const root = document.documentElement;
+    const viewport = window.visualViewport;
+
+    const syncBrowserBottomOffset = () => {
+      const activeViewport = window.visualViewport;
+      const bottomOffset = activeViewport
+        ? Math.max(0, window.innerHeight - activeViewport.height - activeViewport.offsetTop)
+        : 0;
+      root.style.setProperty("--browser-bottom-offset", `${Math.round(bottomOffset)}px`);
+    };
+
+    syncBrowserBottomOffset();
+    window.addEventListener("resize", syncBrowserBottomOffset);
+    window.addEventListener("orientationchange", syncBrowserBottomOffset);
+    viewport?.addEventListener("resize", syncBrowserBottomOffset);
+    viewport?.addEventListener("scroll", syncBrowserBottomOffset);
+
+    return () => {
+      window.removeEventListener("resize", syncBrowserBottomOffset);
+      window.removeEventListener("orientationchange", syncBrowserBottomOffset);
+      viewport?.removeEventListener("resize", syncBrowserBottomOffset);
+      viewport?.removeEventListener("scroll", syncBrowserBottomOffset);
+      root.style.setProperty("--browser-bottom-offset", "0px");
+    };
+  }, []);
+
   if (checking) {
     return <LoadingScreen fullBackground />;
   }

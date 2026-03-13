@@ -1,6 +1,8 @@
 export const globalCSS = `@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=JetBrains+Mono:wght@400;700;800&display=swap');
 :root{
 --app-height:100dvh;
+--browser-bottom-offset:0px;
+--bottom-nav-height:64px;
 --safe-top:clamp(0px,env(safe-area-inset-top,0px),59px);
 --safe-bottom:clamp(0px,env(safe-area-inset-bottom,0px),34px);
 --safe-left:clamp(0px,env(safe-area-inset-left,0px),44px);
