@@ -66,6 +66,7 @@ import { getAuthErrorMessage } from "../auth/authErrors";
 const DEFAULT_THEME = "default";
 const VERCEL_DARK_THEME = "vercel-dark";
 const MAX_IMAGE_TARGET_BYTES = 450 * 1024;
+const MAX_IMAGE_DATA_URL_CHARS = 850000;
 
 const readFileAsDataUrl = (file) =>
   new Promise((resolve, reject) => {
@@ -75,12 +76,20 @@ const readFileAsDataUrl = (file) =>
     reader.readAsDataURL(file);
   });
 
-const loadImageFromDataUrl = (dataUrl) =>
+const loadImageFromFile = (file) =>
   new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
     const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("image-load-failed"));
-    image.src = dataUrl;
+
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("image-file-load-failed"));
+    };
+    image.src = objectUrl;
   });
 
 const canvasToJpegBlob = (canvas, quality) =>
@@ -105,12 +114,8 @@ const blobToDataUrl = (blob) =>
   });
 
 const prepareProductImage = async (file) => {
-  const baseDataUrl = await readFileAsDataUrl(file);
-  if (!baseDataUrl) return "";
-  const safeBaseDataUrl = sanitizeImageDataUrl(baseDataUrl);
-
   try {
-    const image = await loadImageFromDataUrl(baseDataUrl);
+    const image = await loadImageFromFile(file);
     const maxSide = 1200;
     const sourceMaxSide = Math.max(image.width || 1, image.height || 1);
     const baseScale = Math.min(1, maxSide / sourceMaxSide);
@@ -136,21 +141,30 @@ const prepareProductImage = async (file) => {
         if (blob) {
           candidateDataUrl = await blobToDataUrl(blob);
           if (blob.size <= MAX_IMAGE_TARGET_BYTES) {
-            const safeDataUrl = sanitizeImageDataUrl(candidateDataUrl);
+            const safeDataUrl = sanitizeImageDataUrl(candidateDataUrl, {
+              maxLength: MAX_IMAGE_DATA_URL_CHARS
+            });
             if (safeDataUrl) return safeDataUrl;
           }
         } else {
           candidateDataUrl = canvasToJpegDataUrl(canvas, quality);
         }
 
-        const safeDataUrl = sanitizeImageDataUrl(candidateDataUrl);
+        const safeDataUrl = sanitizeImageDataUrl(candidateDataUrl, {
+          maxLength: MAX_IMAGE_DATA_URL_CHARS
+        });
         if (safeDataUrl) return safeDataUrl;
       }
     }
-
-    return safeBaseDataUrl;
   } catch {
-    return safeBaseDataUrl;
+    // Fall through to base file data URL fallback.
+  }
+
+  try {
+    const baseDataUrl = await readFileAsDataUrl(file);
+    return sanitizeImageDataUrl(baseDataUrl, { maxLength: MAX_IMAGE_DATA_URL_CHARS });
+  } catch {
+    return "";
   }
 };
 
@@ -178,6 +192,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
   const [settingsSuccess, setSettingsSuccess] = useState("");
 
   const [productSearch, setProductSearch] = useState("");
+  const [productsView, setProductsView] = useState("listed");
 
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState(new Set());
@@ -287,6 +302,12 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
       setSelectedPackageIds(new Set());
     }
   }, [tab, pkgSelectionMode]);
+
+  useEffect(() => {
+    if (tab !== "products" && productsView !== "listed") {
+      setProductsView("listed");
+    }
+  }, [tab, productsView]);
 
   useEffect(() => {
     if (selectedProductIds.size === 0) return;
@@ -414,13 +435,18 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
     return list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }, [products, productSearch, locale]);
 
-  const productsForSale = useMemo(
-    () => filteredProducts.filter((product) => !isSoldStatus(product.status)),
+  const productsListed = useMemo(
+    () => filteredProducts.filter((product) => product.status === "En venta"),
     [filteredProducts]
   );
 
   const productsSold = useMemo(
     () => filteredProducts.filter((product) => isSoldStatus(product.status)),
+    [filteredProducts]
+  );
+
+  const productsArchived = useMemo(
+    () => filteredProducts.filter((product) => isDiscardedOrKeptStatus(product.status)),
     [filteredProducts]
   );
 
@@ -2346,22 +2372,6 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
               )}
             </div>
 
-            <div
-              style={{
-                background: "var(--surface-2)",
-                border: "1px solid var(--border)",
-                borderRadius: 10,
-                padding: "8px 10px",
-                marginBottom: 12,
-                fontSize: 10,
-                color: "var(--text-muted)"
-              }}
-            >
-              {t("products.ageLegend")} <span style={{ color: "var(--info)" }}>7d</span> ·{" "}
-              <span style={{ color: "var(--warning)" }}>14d</span> ·{" "}
-              <span style={{ color: "var(--alert)" }}>28d</span> · <span style={{ color: "var(--danger)" }}>42d+</span>
-            </div>
-
             {filteredProducts.length === 0 ? (
               <EmptyState
                 icon="🔎"
@@ -2369,32 +2379,66 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
               />
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <div style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 14, padding: 12 }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: 8
-                    }}
-                  >
-                    <div style={{ fontWeight: 800, fontSize: 12 }}>🟢 {t("products.listedTitle")}</div>
-                    <div style={{ fontSize: 10, color: "var(--text-soft)" }}>
-                      {t("products.itemsCount", { count: productsForSale.length })}
-                    </div>
-                  </div>
-
-                  {productsForSale.length === 0 ? (
-                    <div style={{ fontSize: 11, color: "var(--text-subtle)", textAlign: "center", padding: 16 }}>
-                      {t("products.noListedProducts")}
-                    </div>
-                  ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      {productsForSale.map(renderProductCard)}
-                    </div>
-                  )}
+                <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
+                  {[
+                    {
+                      id: "listed",
+                      icon: "🟢",
+                      label: t("products.listedTitle"),
+                      count: productsListed.length
+                    },
+                    {
+                      id: "sold",
+                      icon: "✅",
+                      label: t("products.soldTitle"),
+                      count: productsSold.length
+                    },
+                    {
+                      id: "archived",
+                      icon: "📦",
+                      label: `${statusLabel("Descartado")} + ${statusLabel("Me lo quedo")}`,
+                      count: productsArchived.length
+                    }
+                  ].map((viewTab) => (
+                    <button
+                      key={viewTab.id}
+                      onClick={() => setProductsView(viewTab.id)}
+                      style={{
+                        border: "1px solid var(--border)",
+                        borderColor: productsView === viewTab.id ? "var(--accent)" : "var(--border)",
+                        background: productsView === viewTab.id ? "var(--surface-3)" : "var(--surface-2)",
+                        color: productsView === viewTab.id ? "var(--text-primary)" : "var(--text-soft)",
+                        borderRadius: 10,
+                        padding: "9px 11px",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                        flexShrink: 0
+                      }}
+                    >
+                      {viewTab.icon} {viewTab.label} · {viewTab.count}
+                    </button>
+                  ))}
                 </div>
 
+                {productsView === "listed" && (
+                  <div
+                    style={{
+                      background: "var(--surface-2)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 10,
+                      padding: "8px 10px",
+                      fontSize: 10,
+                      color: "var(--text-muted)"
+                    }}
+                  >
+                    {t("products.ageLegend")} <span style={{ color: "var(--info)" }}>7d</span> ·{" "}
+                    <span style={{ color: "var(--warning)" }}>14d</span> ·{" "}
+                    <span style={{ color: "var(--alert)" }}>28d</span> · <span style={{ color: "var(--danger)" }}>42d+</span>
+                  </div>
+                )}
+
                 <div style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 14, padding: 12 }}>
                   <div
                     style={{
@@ -2404,19 +2448,47 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
                       marginBottom: 8
                     }}
                   >
-                    <div style={{ fontWeight: 800, fontSize: 12 }}>✅ {t("products.soldTitle")}</div>
+                    <div style={{ fontWeight: 800, fontSize: 12 }}>
+                      {productsView === "listed" ? "🟢" : productsView === "sold" ? "✅" : "📦"}{" "}
+                      {productsView === "listed"
+                        ? t("products.listedTitle")
+                        : productsView === "sold"
+                          ? t("products.soldTitle")
+                          : `${statusLabel("Descartado")} + ${statusLabel("Me lo quedo")}`}
+                    </div>
                     <div style={{ fontSize: 10, color: "var(--text-soft)" }}>
-                      {t("products.itemsCount", { count: productsSold.length })}
+                      {t("products.itemsCount", {
+                        count:
+                          productsView === "listed"
+                            ? productsListed.length
+                            : productsView === "sold"
+                              ? productsSold.length
+                              : productsArchived.length
+                      })}
                     </div>
                   </div>
 
-                  {productsSold.length === 0 ? (
+                  {(productsView === "listed"
+                    ? productsListed
+                    : productsView === "sold"
+                      ? productsSold
+                      : productsArchived
+                  ).length === 0 ? (
                     <div style={{ fontSize: 11, color: "var(--text-subtle)", textAlign: "center", padding: 16 }}>
-                      {t("products.noSoldProducts")}
+                      {productsView === "listed"
+                        ? t("products.noListedProducts")
+                        : productsView === "sold"
+                          ? t("products.noSoldProducts")
+                          : t("products.noResults")}
                     </div>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      {productsSold.map(renderProductCard)}
+                      {(productsView === "listed"
+                        ? productsListed
+                        : productsView === "sold"
+                          ? productsSold
+                          : productsArchived
+                      ).map(renderProductCard)}
                     </div>
                   )}
                 </div>
