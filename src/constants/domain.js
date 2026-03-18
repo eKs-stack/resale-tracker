@@ -1,7 +1,6 @@
 export const PLATFORMS = ["Wallapop", "Vinted"];
 
 export const PRODUCT_STATUS = [
-  "Pendiente",
   "En venta",
   "Vendido",
   "Descartado",
@@ -23,7 +22,6 @@ export const CATEGORIES = [
 export const CONDITIONS = ["Nuevo", "Bueno", "Aceptable", "Dañado"];
 
 export const STATUS_KEYS = {
-  "Pendiente": "pending",
   "En venta": "listed",
   Vendido: "sold",
   Descartado: "discarded",
@@ -56,7 +54,6 @@ export const PLATFORM_KEYS = {
 };
 
 export const STATUS_BADGE_COLORS = {
-  pending: "yellow",
   listed: "blue",
   sold: "green",
   discarded: "red",
@@ -105,7 +102,7 @@ export const ALERT_LEVELS = [
 
 export const TERMINAL_STATUS = new Set(["Vendido", "Descartado", "Me lo quedo"]);
 
-export const getStatusKey = (value) => STATUS_KEYS[value] || "pending";
+export const getStatusKey = (value) => STATUS_KEYS[value] || "listed";
 export const getCategoryKey = (value) => CATEGORY_KEYS[value] || "others";
 export const getConditionKey = (value) => CONDITION_KEYS[value] || "good";
 export const getPlatformKey = (value) => PLATFORM_KEYS[value] || "other";

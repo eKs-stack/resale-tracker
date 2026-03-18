@@ -11,7 +11,7 @@ import {
 const DEFAULT_CATEGORY = CATEGORIES[CATEGORIES.length - 1];
 const DEFAULT_CONDITION = "Bueno";
 const DEFAULT_PLATFORM = "Wallapop";
-const DEFAULT_STATUS = "Pendiente";
+const DEFAULT_STATUS = "En venta";
 
 const pickAllowed = (value, allowedValues, fallback) =>
   allowedValues.includes(value) ? value : fallback;

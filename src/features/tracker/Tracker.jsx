@@ -442,7 +442,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
       estPrice: product.estPrice ? String(product.estPrice) : "",
       notes: product.notes || "",
       imageDataUrl: product.imageDataUrl || "",
-      status: PRODUCT_STATUS.includes(product.status) ? product.status : "Pendiente",
+      status: PRODUCT_STATUS.includes(product.status) ? product.status : "En venta",
       soldQuantity: String(getSoldQuantity(product)),
       soldPrice: getProductRevenue(product) ? String(getProductRevenue(product)) : "",
       soldUnitPrice: getSoldUnitPrice(product) ? String(getSoldUnitPrice(product)) : "",
@@ -651,7 +651,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
       condition,
       quantity,
       estPrice,
-      status: "Pendiente",
+      status: "En venta",
       notes: sanitizeText(prodNotes, 1000),
       imageDataUrl: sanitizeImageDataUrl(prodImageDataUrl),
       createdAt: new Date().toISOString(),
@@ -686,7 +686,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
     if (!safeName || !safePackageId) return;
 
     const quantity = sanitizeInteger(editProduct.quantity, { min: 1, max: 500, fallback: 1 });
-    const status = PRODUCT_STATUS.includes(editProduct.status) ? editProduct.status : "Pendiente";
+    const status = PRODUCT_STATUS.includes(editProduct.status) ? editProduct.status : "En venta";
 
     const baseData = {
       name: safeName,
@@ -1869,6 +1869,12 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
 
                 {sortedPackages.map((pkg) => {
                   const packageProducts = products.filter((product) => product.packageId === pkg.id);
+                  const previewProducts = packageProducts.slice(0, 3);
+                  const remainingPreviewCount = Math.max(0, packageProducts.length - previewProducts.length);
+                  const previewCategories = [...new Set(packageProducts.map((product) => categoryLabel(product.category)))].slice(
+                    0,
+                    3
+                  );
                   const soldUnits = packageProducts.reduce(
                     (sum, product) => sum + getSoldQuantity(product),
                     0
@@ -1922,6 +1928,21 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
                           )}
                           <div>
                             <div style={{ fontWeight: 700, fontSize: 14 }}>{shortDate(pkg.date)}</div>
+                            {pkg.notes && (
+                              <div
+                                style={{
+                                  fontSize: 9,
+                                  color: "var(--text-subtle)",
+                                  marginTop: 2,
+                                  maxWidth: 180,
+                                  whiteSpace: "nowrap",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis"
+                                }}
+                              >
+                                {pkg.notes}
+                              </div>
+                            )}
                           </div>
                           <Badge color={(Number(pkg.cost) || 0) <= 3 ? "green" : "orange"}>
                             {currency(pkg.cost)}
@@ -1942,6 +1963,132 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
                             {t("packages.soldUnits", { sold: soldUnits, total: totalUnits })}
                           </div>
                         </div>
+                      </div>
+
+                      <div
+                        style={{
+                          background: "var(--surface-0)",
+                          border: "1px solid var(--border)",
+                          borderRadius: 10,
+                          padding: "10px 11px",
+                          marginBottom: 8
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            gap: 10,
+                            marginBottom: packageProducts.length > 0 ? 8 : 0
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: 10,
+                              color: "var(--text-muted)",
+                              textTransform: "uppercase",
+                              letterSpacing: 0.9
+                            }}
+                          >
+                            {t("packages.packageProductsTitle")}
+                          </div>
+                          <div style={{ fontSize: 10, color: "var(--text-subtle)" }}>
+                            {t("products.itemsCount", { count: packageProducts.length })}
+                          </div>
+                        </div>
+
+                        {packageProducts.length === 0 ? (
+                          <div style={{ fontSize: 10, color: "var(--text-subtle)" }}>
+                            {t("packages.packageHasNoProducts")}
+                          </div>
+                        ) : (
+                          <>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                              {previewCategories.map((category) => (
+                                <span
+                                  key={`${pkg.id}-${category}`}
+                                  style={{
+                                    fontSize: 9,
+                                    color: "var(--text-soft)",
+                                    padding: "3px 8px",
+                                    borderRadius: 999,
+                                    border: "1px solid var(--border)",
+                                    background: "var(--surface-2)"
+                                  }}
+                                >
+                                  {category}
+                                </span>
+                              ))}
+                            </div>
+
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                              {previewProducts.map((product) => (
+                                <div
+                                  key={product.id}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    gap: 8
+                                  }}
+                                >
+                                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                                    <div
+                                      style={{
+                                        width: 22,
+                                        height: 22,
+                                        borderRadius: 6,
+                                        border: "1px solid var(--border)",
+                                        background: "var(--surface-2)",
+                                        overflow: "hidden",
+                                        flexShrink: 0,
+                                        display: "grid",
+                                        placeItems: "center",
+                                        color: "var(--text-muted)",
+                                        fontSize: 10,
+                                        fontWeight: 700
+                                      }}
+                                    >
+                                      {product.imageDataUrl ? (
+                                        <img
+                                          src={product.imageDataUrl}
+                                          alt={t("products.imageAlt", { name: product.name })}
+                                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                        />
+                                      ) : (
+                                        (product.name || "?").trim().charAt(0).toUpperCase()
+                                      )}
+                                    </div>
+
+                                    <div
+                                      style={{
+                                        minWidth: 0,
+                                        fontSize: 11,
+                                        color: "var(--text-soft)",
+                                        whiteSpace: "nowrap",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis"
+                                      }}
+                                    >
+                                      {product.name}
+                                    </div>
+                                  </div>
+
+                                  <Badge color={STATUS_BADGE_COLORS[getStatusKey(product.status)] || "neutral"}>
+                                    {statusLabel(product.status)}
+                                  </Badge>
+                                </div>
+                              ))}
+
+                              {remainingPreviewCount > 0 && (
+                                <div style={{ fontSize: 10, color: "var(--text-subtle)" }}>
+                                  +{t("products.itemsCount", { count: remainingPreviewCount })}
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
                       </div>
 
                       <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
@@ -2845,12 +2992,54 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
               </div>
             )}
 
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleNewProductImage}
-              style={{ ...inputS, padding: "10px 12px", fontSize: 13 }}
-            />
+            <div style={{ display: "flex", gap: 8 }}>
+              <label
+                style={{
+                  flex: 1,
+                  background: "var(--surface-2)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-soft)",
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  textAlign: "center"
+                }}
+              >
+                📷 {t("products.photoTakeButton")}
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleNewProductImage}
+                  style={{ display: "none" }}
+                />
+              </label>
+
+              <label
+                style={{
+                  flex: 1,
+                  background: "var(--surface-2)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-soft)",
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  textAlign: "center"
+                }}
+              >
+                🖼️ {t("products.photoGalleryButton")}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleNewProductImage}
+                  style={{ display: "none" }}
+                />
+              </label>
+            </div>
 
             {prodImageDataUrl && (
               <button
@@ -3246,12 +3435,54 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
                   </div>
                 )}
 
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleEditProductImage}
-                  style={{ ...inputS, padding: "10px 12px", fontSize: 13 }}
-                />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <label
+                    style={{
+                      flex: 1,
+                      background: "var(--surface-2)",
+                      border: "1px solid var(--border)",
+                      color: "var(--text-soft)",
+                      padding: "10px 12px",
+                      borderRadius: 8,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      textAlign: "center"
+                    }}
+                  >
+                    📷 {t("products.photoTakeButton")}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handleEditProductImage}
+                      style={{ display: "none" }}
+                    />
+                  </label>
+
+                  <label
+                    style={{
+                      flex: 1,
+                      background: "var(--surface-2)",
+                      border: "1px solid var(--border)",
+                      color: "var(--text-soft)",
+                      padding: "10px 12px",
+                      borderRadius: 8,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      textAlign: "center"
+                    }}
+                  >
+                    🖼️ {t("products.photoGalleryButton")}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleEditProductImage}
+                      style={{ display: "none" }}
+                    />
+                  </label>
+                </div>
 
                 {editProduct.imageDataUrl && (
                   <button
