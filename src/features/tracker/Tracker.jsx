@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   EmailAuthProvider,
   reauthenticateWithCredential,
@@ -88,6 +88,14 @@ const canvasToJpegBlob = (canvas, quality) =>
     canvas.toBlob((blob) => resolve(blob), "image/jpeg", quality);
   });
 
+const canvasToJpegDataUrl = (canvas, quality) => {
+  try {
+    return canvas.toDataURL("image/jpeg", quality);
+  } catch {
+    return "";
+  }
+};
+
 const blobToDataUrl = (blob) =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -104,30 +112,43 @@ const prepareProductImage = async (file) => {
   try {
     const image = await loadImageFromDataUrl(baseDataUrl);
     const maxSide = 1200;
-    const scale = Math.min(1, maxSide / Math.max(image.width || 1, image.height || 1));
-    const width = Math.max(1, Math.round((image.width || 1) * scale));
-    const height = Math.max(1, Math.round((image.height || 1) * scale));
+    const sourceMaxSide = Math.max(image.width || 1, image.height || 1);
+    const baseScale = Math.min(1, maxSide / sourceMaxSide);
 
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return safeBaseDataUrl;
+    for (let sizeAttempt = 0; sizeAttempt < 5; sizeAttempt += 1) {
+      const extraScale = Math.pow(0.82, sizeAttempt);
+      const scale = baseScale * extraScale;
+      const width = Math.max(1, Math.round((image.width || 1) * scale));
+      const height = Math.max(1, Math.round((image.height || 1) * scale));
 
-    ctx.drawImage(image, 0, 0, width, height);
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) continue;
 
-    let quality = 0.84;
-    let blob = await canvasToJpegBlob(canvas, quality);
+      ctx.drawImage(image, 0, 0, width, height);
 
-    while (blob && blob.size > MAX_IMAGE_TARGET_BYTES && quality > 0.5) {
-      quality -= 0.08;
-      blob = await canvasToJpegBlob(canvas, quality);
+      for (let quality = 0.86; quality >= 0.34; quality -= 0.08) {
+        const blob = await canvasToJpegBlob(canvas, quality);
+        let candidateDataUrl = "";
+
+        if (blob) {
+          candidateDataUrl = await blobToDataUrl(blob);
+          if (blob.size <= MAX_IMAGE_TARGET_BYTES) {
+            const safeDataUrl = sanitizeImageDataUrl(candidateDataUrl);
+            if (safeDataUrl) return safeDataUrl;
+          }
+        } else {
+          candidateDataUrl = canvasToJpegDataUrl(canvas, quality);
+        }
+
+        const safeDataUrl = sanitizeImageDataUrl(candidateDataUrl);
+        if (safeDataUrl) return safeDataUrl;
+      }
     }
 
-    if (!blob) return safeBaseDataUrl;
-
-    const compressedDataUrl = sanitizeImageDataUrl(await blobToDataUrl(blob));
-    return compressedDataUrl || safeBaseDataUrl;
+    return safeBaseDataUrl;
   } catch {
     return safeBaseDataUrl;
   }
@@ -183,6 +204,8 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
   const [sellQty, setSellQty] = useState("1");
   const [sellPlat, setSellPlat] = useState("Wallapop");
   const [sellDate, setSellDate] = useState(() => nowInputDate());
+  const lastSavedEditProductKeyRef = useRef("");
+  const lastSavedEditPackageKeyRef = useRef("");
 
   const currency = (value) => formatCurrency(value, locale);
   const shortDate = (value) => formatDate(value, locale);
@@ -437,7 +460,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
     const fallbackCategory = CATEGORIES[CATEGORIES.length - 1];
     const fallbackCondition = "Bueno";
 
-    setEditProduct({
+    const initialDraft = {
       id: product.id,
       name: product.name || "",
       category: CATEGORIES.includes(product.category) ? product.category : fallbackCategory,
@@ -455,16 +478,22 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
       soldUnitPrice: getSoldUnitPrice(product) ? String(getSoldUnitPrice(product)) : "",
       soldPlatform: product.soldPlatform || "Wallapop",
       soldDate: product.soldDate || nowInputDate()
-    });
+    };
+
+    lastSavedEditProductKeyRef.current = JSON.stringify(initialDraft);
+    setEditProduct(initialDraft);
   };
 
   const openEditPackage = (pkg) => {
-    setEditPackage({
+    const initialDraft = {
       id: pkg.id,
       date: pkg.date || nowInputDate(),
       cost: pkg.cost ? String(pkg.cost) : "",
       notes: pkg.notes || ""
-    });
+    };
+
+    lastSavedEditPackageKeyRef.current = JSON.stringify(initialDraft);
+    setEditPackage(initialDraft);
   };
 
   const openSettings = () => {
@@ -685,39 +714,39 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
     setShowAddProd(false);
   };
 
-  const saveEditedProduct = async () => {
-    if (!editProduct) return;
+  const saveEditedProduct = async (productDraft = editProduct) => {
+    if (!productDraft) return false;
 
-    const safeName = sanitizeText(editProduct.name, 160);
-    const safePackageId = sanitizeText(editProduct.packageId, 120);
-    if (!safeName || !safePackageId) return;
+    const safeName = sanitizeText(productDraft.name, 160);
+    const safePackageId = sanitizeText(productDraft.packageId, 120);
+    if (!safeName || !safePackageId) return false;
 
-    const quantity = sanitizeInteger(editProduct.quantity, { min: 1, max: 500, fallback: 1 });
-    const status = PRODUCT_STATUS.includes(editProduct.status) ? editProduct.status : "En venta";
+    const quantity = sanitizeInteger(productDraft.quantity, { min: 1, max: 500, fallback: 1 });
+    const status = PRODUCT_STATUS.includes(productDraft.status) ? productDraft.status : "En venta";
 
     const baseData = {
       name: safeName,
-      category: CATEGORIES.includes(editProduct.category)
-        ? editProduct.category
+      category: CATEGORIES.includes(productDraft.category)
+        ? productDraft.category
         : CATEGORIES[CATEGORIES.length - 1],
       packageId: safePackageId,
-      condition: CONDITIONS.includes(editProduct.condition) ? editProduct.condition : "Bueno",
+      condition: CONDITIONS.includes(productDraft.condition) ? productDraft.condition : "Bueno",
       quantity,
-      estPrice: sanitizeNumber(editProduct.estPrice, {
+      estPrice: sanitizeNumber(productDraft.estPrice, {
         min: 0,
         max: 100000,
         decimals: 2,
         fallback: 0
       }),
-      notes: sanitizeText(editProduct.notes, 1000),
-      imageDataUrl: sanitizeImageDataUrl(editProduct.imageDataUrl),
+      notes: sanitizeText(productDraft.notes, 1000),
+      imageDataUrl: sanitizeImageDataUrl(productDraft.imageDataUrl),
       status,
       updatedAt: new Date().toISOString()
     };
 
     if (isSoldStatus(status)) {
       const soldQuantity = quantity;
-      const soldUnitPrice = sanitizeNumber(editProduct.soldUnitPrice, {
+      const soldUnitPrice = sanitizeNumber(productDraft.soldUnitPrice, {
         min: 0,
         max: 100000,
         decimals: 2,
@@ -731,28 +760,28 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
               decimals: 2,
               fallback: 0
             })
-          : sanitizeNumber(editProduct.soldPrice, {
+          : sanitizeNumber(productDraft.soldPrice, {
               min: 0,
               max: 100000,
               decimals: 2,
               fallback: 0
             });
 
-      await updateDoc(doc(db, "products", editProduct.id), {
+      await updateDoc(doc(db, "products", productDraft.id), {
         ...baseData,
         soldQuantity,
         soldPrice,
         soldUnitPrice:
           soldQuantity > 0 ? (soldUnitPrice > 0 ? soldUnitPrice : soldPrice / soldQuantity) : null,
         soldPlatform:
-          editProduct.soldPlatform && PLATFORMS.includes(editProduct.soldPlatform)
-            ? editProduct.soldPlatform
+          productDraft.soldPlatform && PLATFORMS.includes(productDraft.soldPlatform)
+            ? productDraft.soldPlatform
             : null,
-        soldDate: sanitizeDateInput(editProduct.soldDate, null),
+        soldDate: sanitizeDateInput(productDraft.soldDate, null),
         soldBy: actor()
       });
     } else {
-      await updateDoc(doc(db, "products", editProduct.id), {
+      await updateDoc(doc(db, "products", productDraft.id), {
         ...baseData,
         soldQuantity: 0,
         soldPrice: 0,
@@ -763,33 +792,89 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
       });
     }
 
-    setEditProduct(null);
+    return true;
   };
 
-  const saveEditedPackage = async () => {
-    if (!editPackage) return;
+  const saveEditedPackage = async (packageDraft = editPackage) => {
+    if (!packageDraft) return false;
 
-    const date = sanitizeDateInput(editPackage.date, null);
-    if (!date) return;
+    const date = sanitizeDateInput(packageDraft.date, null);
+    if (!date) return false;
 
-    const cost = sanitizeNumber(editPackage.cost, {
+    const cost = sanitizeNumber(packageDraft.cost, {
       min: 0,
       max: 100000,
       decimals: 2,
       fallback: 0
     });
-    if (cost <= 0) return;
+    if (cost <= 0) return false;
 
-    await updateDoc(doc(db, "packages", editPackage.id), {
+    await updateDoc(doc(db, "packages", packageDraft.id), {
       date,
       cost,
-      notes: sanitizeText(editPackage.notes, 500),
+      notes: sanitizeText(packageDraft.notes, 500),
       updatedAt: new Date().toISOString(),
       updatedBy: actor()
     });
 
+    return true;
+  };
+
+  const closeEditPackage = () => {
+    const draft = editPackage;
+    if (draft) {
+      const draftKey = JSON.stringify(draft);
+      if (draftKey !== lastSavedEditPackageKeyRef.current) {
+        void saveEditedPackage(draft).then((saved) => {
+          if (saved) lastSavedEditPackageKeyRef.current = draftKey;
+        });
+      }
+    }
     setEditPackage(null);
   };
+
+  const closeEditProduct = () => {
+    const draft = editProduct;
+    if (draft) {
+      const draftKey = JSON.stringify(draft);
+      if (draftKey !== lastSavedEditProductKeyRef.current) {
+        void saveEditedProduct(draft).then((saved) => {
+          if (saved) lastSavedEditProductKeyRef.current = draftKey;
+        });
+      }
+    }
+    setEditProduct(null);
+  };
+
+  useEffect(() => {
+    if (!editPackage) return;
+
+    const draftKey = JSON.stringify(editPackage);
+    if (draftKey === lastSavedEditPackageKeyRef.current) return;
+
+    const timer = window.setTimeout(() => {
+      void saveEditedPackage(editPackage).then((saved) => {
+        if (saved) lastSavedEditPackageKeyRef.current = draftKey;
+      });
+    }, 450);
+
+    return () => window.clearTimeout(timer);
+  }, [editPackage]);
+
+  useEffect(() => {
+    if (!editProduct) return;
+
+    const draftKey = JSON.stringify(editProduct);
+    if (draftKey === lastSavedEditProductKeyRef.current) return;
+
+    const timer = window.setTimeout(() => {
+      void saveEditedProduct(editProduct).then((saved) => {
+        if (saved) lastSavedEditProductKeyRef.current = draftKey;
+      });
+    }, 450);
+
+    return () => window.clearTimeout(timer);
+  }, [editProduct]);
 
   const deletePackagesWithProducts = async (packageIds) => {
     if (!packageIds || packageIds.length === 0) return;
@@ -2835,7 +2920,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
         </button>
       </Modal>
 
-      <Modal open={!!editPackage} onClose={() => setEditPackage(null)} title={t("packages.editPackage")}>
+      <Modal open={!!editPackage} onClose={closeEditPackage} title={t("packages.editPackage")}>
         {editPackage && (
           <>
             <Field label={t("packages.purchaseDate")}>
@@ -2879,9 +2964,6 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
                 style={inputS}
               />
             </Field>
-            <button onClick={saveEditedPackage} style={btnP}>
-              {t("common.saveChanges")}
-            </button>
           </>
         )}
       </Modal>
@@ -3293,7 +3375,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
         </button>
       </Modal>
 
-      <Modal open={!!editProduct} onClose={() => setEditProduct(null)} title={t("products.editProduct")}>
+      <Modal open={!!editProduct} onClose={closeEditProduct} title={t("products.editProduct")}>
         {editProduct && (
           <>
             <Field label={t("products.name")}>
@@ -3588,9 +3670,6 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
               />
             </Field>
 
-            <button onClick={saveEditedProduct} style={btnP}>
-              {t("common.saveChanges")}
-            </button>
           </>
         )}
       </Modal>
