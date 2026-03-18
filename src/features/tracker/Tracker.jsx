@@ -2848,7 +2848,6 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
             <input
               type="file"
               accept="image/*"
-              capture="environment"
               onChange={handleNewProductImage}
               style={{ ...inputS, padding: "10px 12px", fontSize: 13 }}
             />
@@ -3250,7 +3249,6 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
                 <input
                   type="file"
                   accept="image/*"
-                  capture="environment"
                   onChange={handleEditProductImage}
                   style={{ ...inputS, padding: "10px 12px", fontSize: 13 }}
                 />
