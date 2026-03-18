@@ -99,31 +99,38 @@ const blobToDataUrl = (blob) =>
 const prepareProductImage = async (file) => {
   const baseDataUrl = await readFileAsDataUrl(file);
   if (!baseDataUrl) return "";
+  const safeBaseDataUrl = sanitizeImageDataUrl(baseDataUrl);
 
-  const image = await loadImageFromDataUrl(baseDataUrl);
-  const maxSide = 1200;
-  const scale = Math.min(1, maxSide / Math.max(image.width || 1, image.height || 1));
-  const width = Math.max(1, Math.round((image.width || 1) * scale));
-  const height = Math.max(1, Math.round((image.height || 1) * scale));
+  try {
+    const image = await loadImageFromDataUrl(baseDataUrl);
+    const maxSide = 1200;
+    const scale = Math.min(1, maxSide / Math.max(image.width || 1, image.height || 1));
+    const width = Math.max(1, Math.round((image.width || 1) * scale));
+    const height = Math.max(1, Math.round((image.height || 1) * scale));
 
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return sanitizeImageDataUrl(baseDataUrl);
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return safeBaseDataUrl;
 
-  ctx.drawImage(image, 0, 0, width, height);
+    ctx.drawImage(image, 0, 0, width, height);
 
-  let quality = 0.84;
-  let blob = await canvasToJpegBlob(canvas, quality);
+    let quality = 0.84;
+    let blob = await canvasToJpegBlob(canvas, quality);
 
-  while (blob && blob.size > MAX_IMAGE_TARGET_BYTES && quality > 0.5) {
-    quality -= 0.08;
-    blob = await canvasToJpegBlob(canvas, quality);
+    while (blob && blob.size > MAX_IMAGE_TARGET_BYTES && quality > 0.5) {
+      quality -= 0.08;
+      blob = await canvasToJpegBlob(canvas, quality);
+    }
+
+    if (!blob) return safeBaseDataUrl;
+
+    const compressedDataUrl = sanitizeImageDataUrl(await blobToDataUrl(blob));
+    return compressedDataUrl || safeBaseDataUrl;
+  } catch {
+    return safeBaseDataUrl;
   }
-
-  if (!blob) return sanitizeImageDataUrl(baseDataUrl);
-  return sanitizeImageDataUrl(await blobToDataUrl(blob));
 };
 
 export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) {
@@ -212,7 +219,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
 
   const applyImageFromFile = async (file, setter) => {
     if (!file) return;
-    if (!file.type || !file.type.startsWith("image/")) {
+    if (file.type && !file.type.startsWith("image/")) {
       alert(t("products.imageInvalidType"));
       return;
     }
