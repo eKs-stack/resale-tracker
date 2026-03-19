@@ -67,6 +67,10 @@ const DEFAULT_THEME = "default";
 const VERCEL_DARK_THEME = "vercel-dark";
 const MAX_IMAGE_TARGET_BYTES = 450 * 1024;
 const MAX_IMAGE_DATA_URL_CHARS = 850000;
+const DEFAULT_CATEGORY = CATEGORIES[CATEGORIES.length - 1];
+
+const normalizeCategory = (value, fallback = DEFAULT_CATEGORY) =>
+  sanitizeText(value, 80) || fallback;
 
 const readFileAsDataUrl = (file) =>
   new Promise((resolve, reject) => {
@@ -193,6 +197,11 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
 
   const [productSearch, setProductSearch] = useState("");
   const [productsView, setProductsView] = useState("listed");
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia("(min-width: 1024px)").matches
+      : false
+  );
 
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState(new Set());
@@ -205,7 +214,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
   const [pkgNotes, setPkgNotes] = useState("");
 
   const [prodName, setProdName] = useState("");
-  const [prodCat, setProdCat] = useState(CATEGORIES[CATEGORIES.length - 1]);
+  const [prodCat, setProdCat] = useState(DEFAULT_CATEGORY);
   const [prodPkgId, setProdPkgId] = useState("");
   const [prodCond, setProdCond] = useState("Bueno");
   const [prodQty, setProdQty] = useState("1");
@@ -229,7 +238,13 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
   const productCount = (value) => `${value}${noBreak}${t("common.productsWord")}`;
 
   const statusLabel = (value) => t(`status.${getStatusKey(value)}`);
-  const categoryLabel = (value) => t(`categories.${getCategoryKey(value)}`);
+  const categoryLabel = (value) => {
+    const safeCategory = normalizeCategory(value, "");
+    if (!safeCategory) return t("categories.others");
+    return CATEGORIES.includes(safeCategory)
+      ? t(`categories.${getCategoryKey(safeCategory)}`)
+      : safeCategory;
+  };
   const conditionLabel = (value) => t(`conditions.${getConditionKey(value)}`);
   const platformLabel = (value) => t(`platforms.${getPlatformKey(value)}`);
   const selectedTheme = theme === VERCEL_DARK_THEME ? VERCEL_DARK_THEME : DEFAULT_THEME;
@@ -238,6 +253,17 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
     () => (user?.providerData || []).some((provider) => provider.providerId === "password"),
     [user]
   );
+  const categoryOptions = useMemo(() => {
+    const customCategories = Array.from(
+      new Set(
+        products
+          .map((product) => normalizeCategory(product.category, ""))
+          .filter((category) => category && !CATEGORIES.includes(category))
+      )
+    ).sort((a, b) => a.localeCompare(b, locale, { sensitivity: "base" }));
+
+    return [...CATEGORIES, ...customCategories];
+  }, [products, locale]);
 
   const handleThemeSelection = (event) => {
     if (!onThemeChange) return;
@@ -308,6 +334,23 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
       setProductsView("listed");
     }
   }, [tab, productsView]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+
+    const mediaQuery = window.matchMedia("(min-width: 1024px)");
+    const syncDesktop = (event) => setIsDesktop(Boolean(event.matches));
+
+    setIsDesktop(mediaQuery.matches);
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", syncDesktop);
+      return () => mediaQuery.removeEventListener("change", syncDesktop);
+    }
+
+    mediaQuery.addListener(syncDesktop);
+    return () => mediaQuery.removeListener(syncDesktop);
+  }, []);
 
   useEffect(() => {
     if (selectedProductIds.size === 0) return;
@@ -483,13 +526,12 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
   };
 
   const openEditProduct = (product) => {
-    const fallbackCategory = CATEGORIES[CATEGORIES.length - 1];
     const fallbackCondition = "Bueno";
 
     const initialDraft = {
       id: product.id,
       name: product.name || "",
-      category: CATEGORIES.includes(product.category) ? product.category : fallbackCategory,
+      category: normalizeCategory(product.category),
       packageId: product.packageId || "",
       condition: CONDITIONS.includes(product.condition)
         ? product.condition
@@ -702,7 +744,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
       decimals: 2,
       fallback: 0
     });
-    const category = CATEGORIES.includes(prodCat) ? prodCat : CATEGORIES[CATEGORIES.length - 1];
+    const category = normalizeCategory(prodCat);
     const condition = CONDITIONS.includes(prodCond) ? prodCond : "Bueno";
 
     const product = {
@@ -731,7 +773,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
     await setDoc(doc(db, "products", product.id), product);
 
     setProdName("");
-    setProdCat(CATEGORIES[CATEGORIES.length - 1]);
+    setProdCat(DEFAULT_CATEGORY);
     setProdCond("Bueno");
     setProdQty("1");
     setProdEst("");
@@ -752,9 +794,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
 
     const baseData = {
       name: safeName,
-      category: CATEGORIES.includes(productDraft.category)
-        ? productDraft.category
-        : CATEGORIES[CATEGORIES.length - 1],
+      category: normalizeCategory(productDraft.category),
       packageId: safePackageId,
       condition: CONDITIONS.includes(productDraft.condition) ? productDraft.condition : "Bueno",
       quantity,
@@ -959,9 +999,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
     const soldProduct = {
       id: soldId,
       name: sanitizeText(currentSellProduct.name, 160),
-      category: CATEGORIES.includes(currentSellProduct.category)
-        ? currentSellProduct.category
-        : CATEGORIES[CATEGORIES.length - 1],
+      category: normalizeCategory(currentSellProduct.category),
       packageId: sanitizeText(currentSellProduct.packageId, 120),
       condition: CONDITIONS.includes(currentSellProduct.condition)
         ? currentSellProduct.condition
@@ -1503,20 +1541,36 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
       style={{
         minHeight: "calc(var(--app-height) + 1px)",
         display: "flex",
-        flexDirection: "column"
+        flexDirection: "column",
+        padding: isDesktop ? "20px clamp(16px,4vw,40px) 24px" : 0
       }}
     >
       <div
         style={{
-          padding: "12px 16px",
-          paddingTop: "calc(12px + var(--safe-top))",
-          borderBottom: "1px solid var(--surface-1)",
+          width: "100%",
+          maxWidth: isDesktop ? 1320 : "100%",
+          margin: "0 auto",
+          minHeight: isDesktop ? "calc(var(--app-height) - 44px)" : "calc(var(--app-height) + 1px)",
           display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexShrink: 0
+          flexDirection: "column",
+          background: isDesktop ? "var(--bg-depth)" : "transparent",
+          border: isDesktop ? "1px solid var(--surface-1)" : "none",
+          borderRadius: isDesktop ? 18 : 0,
+          overflow: "hidden",
+          boxShadow: isDesktop ? "0 18px 48px rgba(0,0,0,.22)" : "none"
         }}
       >
+        <div
+          style={{
+            padding: isDesktop ? "16px 20px" : "12px 16px",
+            paddingTop: isDesktop ? 16 : "calc(12px + var(--safe-top))",
+            borderBottom: "1px solid var(--surface-1)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexShrink: 0
+          }}
+        >
         <button
           onClick={openSettings}
           style={{
@@ -1541,7 +1595,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
           </div>
         </button>
 
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {tab === "packages" && (
             <button
               onClick={() => setShowAddPkg(true)}
@@ -1581,15 +1635,57 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
             </button>
           )}
 
+          </div>
         </div>
-      </div>
+
+        {isDesktop && (
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              alignItems: "center",
+              flexWrap: "wrap",
+              padding: "12px 20px",
+              borderBottom: "1px solid var(--surface-1)",
+              background: "var(--surface-0)"
+            }}
+          >
+            {tabList.map((tabItem) => (
+              <button
+                key={tabItem.id}
+                onClick={() => setTab(tabItem.id)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  borderRadius: 10,
+                  border: "1px solid var(--border)",
+                  borderColor: tab === tabItem.id ? "var(--accent)" : "var(--border)",
+                  background: tab === tabItem.id ? "var(--surface-3)" : "var(--surface-1)",
+                  color: tab === tabItem.id ? "var(--accent)" : "var(--text-soft)",
+                  padding: "9px 12px",
+                  fontWeight: 800,
+                  fontSize: 12,
+                  cursor: "pointer"
+                }}
+              >
+                <span style={{ fontSize: 15, lineHeight: 1 }}>{tabItem.icon}</span>
+                <span>{tabItem.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
       <div
         style={{
           flex: 1,
-          padding: 16,
-          paddingBottom:
-            "calc(20px + var(--bottom-nav-height) + var(--safe-bottom) + var(--browser-bottom-offset))"
+          width: "100%",
+          maxWidth: isDesktop ? 1160 : "100%",
+          margin: isDesktop ? "0 auto" : "0",
+          padding: isDesktop ? 20 : 16,
+          paddingBottom: isDesktop
+            ? 20
+            : "calc(20px + var(--bottom-nav-height) + var(--safe-bottom) + var(--browser-bottom-offset))"
         }}
       >
         {tab === "dashboard" && (
@@ -2497,51 +2593,54 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
           </div>
         )}
       </div>
-
-      <div
-        style={{
-          position: "fixed",
-          left: 0,
-          right: 0,
-          bottom: "var(--browser-bottom-offset)",
-          background: "var(--surface-0)",
-          borderTop: "1px solid var(--border)",
-          display: "flex",
-          justifyContent: "space-around",
-          alignItems: "flex-end",
-          boxSizing: "border-box",
-          paddingTop: 8,
-          paddingBottom: "calc(8px + var(--safe-bottom))",
-          minHeight: "calc(var(--bottom-nav-height) + var(--safe-bottom))",
-          paddingLeft: "var(--safe-left)",
-          paddingRight: "var(--safe-right)",
-          zIndex: 1100
-        }}
-      >
-        {tabList.map((tabItem) => (
-          <button
-            key={tabItem.id}
-            onClick={() => setTab(tabItem.id)}
-            style={{
-              background: "transparent",
-              border: "none",
-              cursor: "pointer",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 4,
-              padding: "8px 20px",
-              color: tab === tabItem.id ? "var(--accent)" : "var(--text-muted)",
-              transition: "color .2s",
-              lineHeight: 1
-            }}
-          >
-            <span style={{ fontSize: 20, lineHeight: 1, display: "block" }}>{tabItem.icon}</span>
-            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5 }}>{tabItem.label}</span>
-          </button>
-        ))}
       </div>
+
+      {!isDesktop && (
+        <div
+          style={{
+            position: "fixed",
+            left: 0,
+            right: 0,
+            bottom: "var(--browser-bottom-offset)",
+            background: "var(--surface-0)",
+            borderTop: "1px solid var(--border)",
+            display: "flex",
+            justifyContent: "space-around",
+            alignItems: "flex-end",
+            boxSizing: "border-box",
+            paddingTop: 8,
+            paddingBottom: "calc(8px + var(--safe-bottom))",
+            minHeight: "calc(var(--bottom-nav-height) + var(--safe-bottom))",
+            paddingLeft: "var(--safe-left)",
+            paddingRight: "var(--safe-right)",
+            zIndex: 1100
+          }}
+        >
+          {tabList.map((tabItem) => (
+            <button
+              key={tabItem.id}
+              onClick={() => setTab(tabItem.id)}
+              style={{
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 4,
+                padding: "8px 20px",
+                color: tab === tabItem.id ? "var(--accent)" : "var(--text-muted)",
+                transition: "color .2s",
+                lineHeight: 1
+              }}
+            >
+              <span style={{ fontSize: 20, lineHeight: 1, display: "block" }}>{tabItem.icon}</span>
+              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5 }}>{tabItem.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       <Modal
         open={!!showReviewLevel}
@@ -3067,13 +3166,22 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
 
         <div style={{ display: "flex", gap: 8 }}>
           <Field label={t("products.category")}>
-            <select value={prodCat} onChange={(event) => setProdCat(event.target.value)} style={selectS}>
-              {CATEGORIES.map((category) => (
-                <option key={category} value={category}>
-                  {categoryLabel(category)}
-                </option>
-              ))}
-            </select>
+            <>
+              <input
+                list="new-product-categories"
+                value={prodCat}
+                onChange={(event) => setProdCat(event.target.value)}
+                style={inputS}
+                placeholder={categoryLabel(DEFAULT_CATEGORY)}
+              />
+              <datalist id="new-product-categories">
+                {categoryOptions.map((category) => (
+                  <option key={category} value={category}>
+                    {categoryLabel(category)}
+                  </option>
+                ))}
+              </datalist>
+            </>
           </Field>
 
           <Field label={t("products.condition")}>
@@ -3479,19 +3587,24 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
 
             <div style={{ display: "flex", gap: 8 }}>
               <Field label={t("products.category")}>
-                <select
-                  value={editProduct.category}
-                  onChange={(event) =>
-                    setEditProduct((previous) => ({ ...previous, category: event.target.value }))
-                  }
-                  style={selectS}
-                >
-                  {CATEGORIES.map((category) => (
-                    <option key={category} value={category}>
-                      {categoryLabel(category)}
-                    </option>
-                  ))}
-                </select>
+                <>
+                  <input
+                    list="edit-product-categories"
+                    value={editProduct.category}
+                    onChange={(event) =>
+                      setEditProduct((previous) => ({ ...previous, category: event.target.value }))
+                    }
+                    style={inputS}
+                    placeholder={categoryLabel(DEFAULT_CATEGORY)}
+                  />
+                  <datalist id="edit-product-categories">
+                    {categoryOptions.map((category) => (
+                      <option key={category} value={category}>
+                        {categoryLabel(category)}
+                      </option>
+                    ))}
+                  </datalist>
+                </>
               </Field>
 
               <Field label={t("products.condition")}>

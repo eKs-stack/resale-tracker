@@ -12,6 +12,7 @@ const DEFAULT_CATEGORY = CATEGORIES[CATEGORIES.length - 1];
 const DEFAULT_CONDITION = "Bueno";
 const DEFAULT_PLATFORM = "Wallapop";
 const DEFAULT_STATUS = "En venta";
+const sanitizeCategory = (value) => sanitizeText(value, 80) || DEFAULT_CATEGORY;
 
 const pickAllowed = (value, allowedValues, fallback) =>
   allowedValues.includes(value) ? value : fallback;
@@ -56,7 +57,7 @@ export const sanitizeProductDoc = (raw, id) => {
   return {
     id,
     name: sanitizeText(raw?.name, 160),
-    category: pickAllowed(raw?.category, CATEGORIES, DEFAULT_CATEGORY),
+    category: sanitizeCategory(raw?.category),
     packageId: sanitizeText(raw?.packageId, 120),
     condition: pickAllowed(raw?.condition, CONDITIONS, DEFAULT_CONDITION),
     quantity,
