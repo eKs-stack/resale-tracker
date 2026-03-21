@@ -129,9 +129,10 @@ export const getSoldUnitPrice = (product) => {
 };
 
 const roundMoney = (value) => Math.round(((Number(value) || 0) + Number.EPSILON) * 100) / 100;
+const floorMoney = (value) => Math.floor(((Number(value) || 0) + Number.EPSILON) * 100) / 100;
 
 export const getPriceDropSuggestions = (product, alert) => {
-  const basePrice = Number(product?.estPrice) || 0;
+  const basePrice = roundMoney(Number(product?.estPrice) || 0);
   const percents = Array.isArray(alert?.dropPercents)
     ? alert.dropPercents
         .map((percent) => Number(percent) || 0)
@@ -140,10 +141,20 @@ export const getPriceDropSuggestions = (product, alert) => {
 
   if (basePrice <= 0 || percents.length === 0) return [];
 
-  return percents.map((percent) => ({
-    percent,
-    unitPrice: roundMoney(basePrice * (1 - percent / 100))
-  }));
+  return percents.map((percent) => {
+    const discountedRaw = basePrice * ((100 - percent) / 100);
+    let unitPrice = floorMoney(discountedRaw);
+
+    // Asegura que una sugerencia de bajada nunca suba o iguale el precio base.
+    if (unitPrice >= basePrice && basePrice > 0) {
+      unitPrice = floorMoney(basePrice - 0.01);
+    }
+
+    return {
+      percent,
+      unitPrice: Math.max(0, unitPrice)
+    };
+  });
 };
 
 export const getSalePriceDelta = (product) => {
