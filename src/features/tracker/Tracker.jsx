@@ -187,6 +187,10 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
   const [showSettings, setShowSettings] = useState(false);
   const [showReviewLevel, setShowReviewLevel] = useState(null);
   const [reviewingProductIds, setReviewingProductIds] = useState(new Set());
+  const [showAdvancedDashboard, setShowAdvancedDashboard] = useState(false);
+  const [showAdvancedPkgForm, setShowAdvancedPkgForm] = useState(false);
+  const [showAdvancedProdForm, setShowAdvancedProdForm] = useState(false);
+  const [showAdvancedSellForm, setShowAdvancedSellForm] = useState(false);
   const [settingsName, setSettingsName] = useState("");
   const [settingsEmail, setSettingsEmail] = useState("");
   const [settingsCurrentPassword, setSettingsCurrentPassword] = useState("");
@@ -334,6 +338,18 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
       setProductsView("listed");
     }
   }, [tab, productsView]);
+
+  useEffect(() => {
+    if (!showAddPkg) setShowAdvancedPkgForm(false);
+  }, [showAddPkg]);
+
+  useEffect(() => {
+    if (!showAddProd) setShowAdvancedProdForm(false);
+  }, [showAddProd]);
+
+  useEffect(() => {
+    if (!showSell) setShowAdvancedSellForm(false);
+  }, [showSell]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
@@ -522,6 +538,7 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
     setSellQty("1");
     setSellPlat(product.soldPlatform || "Wallapop");
     setSellDate(nowInputDate());
+    setShowAdvancedSellForm(false);
     setShowSell(productId);
   };
 
@@ -1709,6 +1726,80 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
 
             {packages.length > 0 && (
               <>
+                <div
+                  style={{
+                    background: "var(--surface-1)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 14,
+                    padding: 14
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "var(--text-muted)",
+                      textTransform: "uppercase",
+                      letterSpacing: 1,
+                      marginBottom: 10
+                    }}
+                  >
+                    ⚡ Acciones rápidas
+                  </div>
+
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    <button
+                      onClick={() => {
+                        setTab("packages");
+                        setShowAddPkg(true);
+                      }}
+                      style={{ ...btnP, width: "auto", padding: "11px 14px", fontSize: 12 }}
+                    >
+                      {t("header.addPackage")}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setTab("products");
+                        if (!prodPkgId) setProdPkgId(sortedPackages[0]?.id || "");
+                        setShowAddProd(true);
+                      }}
+                      style={{
+                        background: "var(--surface-3)",
+                        color: "var(--text-primary)",
+                        border: "1px solid var(--border)",
+                        padding: "11px 14px",
+                        borderRadius: 10,
+                        fontWeight: 700,
+                        fontSize: 12,
+                        cursor: "pointer"
+                      }}
+                    >
+                      {t("header.addProduct")}
+                    </button>
+                    <button
+                      onClick={() => {
+                        const firstListed = productsListed[0];
+                        if (!firstListed) return;
+                        setTab("products");
+                        openSellModal(firstListed.id);
+                      }}
+                      disabled={productsListed.length === 0}
+                      style={{
+                        background: productsListed.length === 0 ? "var(--surface-2)" : "var(--surface-3)",
+                        color: productsListed.length === 0 ? "var(--text-subtle)" : "var(--accent)",
+                        border: "1px solid var(--border)",
+                        padding: "11px 14px",
+                        borderRadius: 10,
+                        fontWeight: 700,
+                        fontSize: 12,
+                        cursor: productsListed.length === 0 ? "default" : "pointer",
+                        opacity: productsListed.length === 0 ? 0.72 : 1
+                      }}
+                    >
+                      💰 {t("common.sell")}
+                    </button>
+                  </div>
+                </div>
+
                 <div style={{ background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: 14, padding: 14 }}>
                   <div
                     style={{
@@ -1761,6 +1852,99 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
                     />
                   </div>
                 </div>
+
+                <div
+                  style={{
+                    background: "var(--surface-1)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 14,
+                    padding: 14
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "var(--text-muted)",
+                      textTransform: "uppercase",
+                      letterSpacing: 1,
+                      marginBottom: 10
+                    }}
+                  >
+                    👀 Vista rápida
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div
+                      style={{
+                        background: "var(--surface-0)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 10,
+                        padding: "10px 12px",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 10
+                      }}
+                    >
+                      <span style={{ fontSize: 11, color: "var(--text-soft)" }}>Pendiente por vender</span>
+                      <strong style={{ fontSize: 15, color: "var(--violet)" }}>{unitCount(stats.pendingCount)}</strong>
+                    </div>
+
+                    <div
+                      style={{
+                        background: "var(--surface-0)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 10,
+                        padding: "10px 12px",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 10
+                      }}
+                    >
+                      <span style={{ fontSize: 11, color: "var(--text-soft)" }}>Ventas este mes</span>
+                      <strong style={{ fontSize: 15, color: "var(--accent)" }}>{currency(stats.month.revenue)}</strong>
+                    </div>
+
+                    <div
+                      style={{
+                        background: "var(--surface-0)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 10,
+                        padding: "10px 12px",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 10
+                      }}
+                    >
+                      <span style={{ fontSize: 11, color: "var(--text-soft)" }}>Productos estancados</span>
+                      <strong style={{ fontSize: 15, color: staleProducts.length > 0 ? "var(--warning)" : "var(--info)" }}>
+                        {staleProducts.length}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setShowAdvancedDashboard((previous) => !previous)}
+                  style={{
+                    background: "var(--surface-2)",
+                    border: "1px solid var(--border)",
+                    color: "var(--text-soft)",
+                    width: "100%",
+                    padding: "10px 12px",
+                    borderRadius: 10,
+                    fontWeight: 700,
+                    fontSize: 11,
+                    cursor: "pointer"
+                  }}
+                >
+                  {showAdvancedDashboard ? "Ocultar análisis avanzado" : "Ver análisis avanzado"}
+                </button>
+
+                {showAdvancedDashboard && (
+                  <>
 
                 <div style={{ background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: 14, padding: 14 }}>
                   <div
@@ -2026,6 +2210,8 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
                     )}
                   </div>
                 </div>
+                  </>
+                )}
               </>
             )}
           </div>
@@ -3013,27 +3199,13 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
             style={inputS}
           />
         </Field>
-        <Field
-          label={
-            t("packages.packageCost") +
-            (suggestedCost
-              ? t("packages.autoCostLabel", {
-                  cost: suggestedCost,
-                  day: getDayLabel(pkgDate, locale, t)
-                })
-              : "")
-          }
-        >
-          <NumberInput
-            type="number"
-            step="0.5"
-            placeholder={suggestedCost ? String(suggestedCost) : ""}
-            value={pkgCost}
-            onChange={(event) => setPkgCost(event.target.value)}
-            style={inputS}
-            unit="€"
-          />
-        </Field>
+
+        <div style={{ fontSize: 11, color: "var(--text-soft)", marginBottom: 12 }}>
+          Coste automático: <strong>{currency(pkgUnitCost)}</strong>
+          {suggestedCost
+            ? ` · ${getDayLabel(pkgDate, locale, t)}`
+            : ""}
+        </div>
 
         <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
           {[1, 5, 10, 20].map((amount) => (
@@ -3075,14 +3247,58 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
           </Field>
         </div>
 
-        <Field label={t("common.notesOptional")}>
-          <input
-            placeholder={t("packages.packageNotesPlaceholder")}
-            value={pkgNotes}
-            onChange={(event) => setPkgNotes(event.target.value)}
-            style={inputS}
-          />
-        </Field>
+        <button
+          onClick={() => setShowAdvancedPkgForm((previous) => !previous)}
+          style={{
+            background: "var(--surface-2)",
+            border: "1px solid var(--border)",
+            color: "var(--text-soft)",
+            width: "100%",
+            padding: "9px 12px",
+            borderRadius: 10,
+            fontWeight: 700,
+            fontSize: 11,
+            cursor: "pointer",
+            marginBottom: 12
+          }}
+        >
+          {showAdvancedPkgForm ? "Ocultar opciones avanzadas" : "Más opciones (coste manual y nota)"}
+        </button>
+
+        {showAdvancedPkgForm && (
+          <>
+            <Field
+              label={
+                t("packages.packageCost") +
+                (suggestedCost
+                  ? t("packages.autoCostLabel", {
+                      cost: suggestedCost,
+                      day: getDayLabel(pkgDate, locale, t)
+                    })
+                  : "")
+              }
+            >
+              <NumberInput
+                type="number"
+                step="0.5"
+                placeholder={suggestedCost ? String(suggestedCost) : ""}
+                value={pkgCost}
+                onChange={(event) => setPkgCost(event.target.value)}
+                style={inputS}
+                unit="€"
+              />
+            </Field>
+
+            <Field label={t("common.notesOptional")}>
+              <input
+                placeholder={t("packages.packageNotesPlaceholder")}
+                value={pkgNotes}
+                onChange={(event) => setPkgNotes(event.target.value)}
+                style={inputS}
+              />
+            </Field>
+          </>
+        )}
 
         <button onClick={addPkg} style={btnP}>
           {pkgQtyNum > 1
@@ -3184,29 +3400,33 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
             </>
           </Field>
 
-          <Field label={t("products.condition")}>
-            <select value={prodCond} onChange={(event) => setProdCond(event.target.value)} style={selectS}>
-              {CONDITIONS.map((condition) => (
-                <option key={condition} value={condition}>
-                  {conditionLabel(condition)}
-                </option>
-              ))}
-            </select>
-          </Field>
+          {showAdvancedProdForm && (
+            <Field label={t("products.condition")}>
+              <select value={prodCond} onChange={(event) => setProdCond(event.target.value)} style={selectS}>
+                {CONDITIONS.map((condition) => (
+                  <option key={condition} value={condition}>
+                    {conditionLabel(condition)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
         </div>
 
         <div style={{ display: "flex", gap: 8 }}>
-          <Field label={t("products.quantity")}>
-            <NumberInput
-              type="number"
-              min="1"
-              step="1"
-              value={prodQty}
-              onChange={(event) => setProdQty(event.target.value)}
-              style={inputS}
-              unit={t("common.unitShort")}
-            />
-          </Field>
+          {showAdvancedProdForm && (
+            <Field label={t("products.quantity")}>
+              <NumberInput
+                type="number"
+                min="1"
+                step="1"
+                value={prodQty}
+                onChange={(event) => setProdQty(event.target.value)}
+                style={inputS}
+                unit={t("common.unitShort")}
+              />
+            </Field>
+          )}
 
           <Field label={t("products.targetUnitPrice")}>
             <NumberInput
@@ -3220,6 +3440,24 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
             />
           </Field>
         </div>
+
+        <button
+          onClick={() => setShowAdvancedProdForm((previous) => !previous)}
+          style={{
+            background: "var(--surface-2)",
+            border: "1px solid var(--border)",
+            color: "var(--text-soft)",
+            width: "100%",
+            padding: "9px 12px",
+            borderRadius: 10,
+            fontWeight: 700,
+            fontSize: 11,
+            cursor: "pointer",
+            marginBottom: 12
+          }}
+        >
+          {showAdvancedProdForm ? "Ocultar opciones avanzadas" : "Más opciones (estado, cantidad y nota)"}
+        </button>
 
         <Field label={t("products.photoLabel")}>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -3330,14 +3568,16 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
           </div>
         </Field>
 
-        <Field label={t("common.notesOptional")}>
-          <input
-            placeholder={t("products.detailsPlaceholder")}
-            value={prodNotes}
-            onChange={(event) => setProdNotes(event.target.value)}
-            style={inputS}
-          />
-        </Field>
+        {showAdvancedProdForm && (
+          <Field label={t("common.notesOptional")}>
+            <input
+              placeholder={t("products.detailsPlaceholder")}
+              value={prodNotes}
+              onChange={(event) => setProdNotes(event.target.value)}
+              style={inputS}
+            />
+          </Field>
+        )}
 
         <button onClick={addProd} style={btnP}>
           {t("products.addProductButton")}
@@ -3527,24 +3767,46 @@ export default function Tracker({ user, theme = DEFAULT_THEME, onThemeChange }) 
           </div>
         )}
 
-        <Field label={t("common.platform")}>
-          <select value={sellPlat} onChange={(event) => setSellPlat(event.target.value)} style={selectS}>
-            {PLATFORMS.map((platform) => (
-              <option key={platform} value={platform}>
-                {platformLabel(platform)}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <button
+          onClick={() => setShowAdvancedSellForm((previous) => !previous)}
+          style={{
+            background: "var(--surface-2)",
+            border: "1px solid var(--border)",
+            color: "var(--text-soft)",
+            width: "100%",
+            padding: "9px 12px",
+            borderRadius: 10,
+            fontWeight: 700,
+            fontSize: 11,
+            cursor: "pointer",
+            marginBottom: 12
+          }}
+        >
+          {showAdvancedSellForm ? "Ocultar opciones avanzadas" : "Más opciones (fecha y plataforma)"}
+        </button>
 
-        <Field label={t("common.date")}>
-          <input
-            type="date"
-            value={sellDate}
-            onChange={(event) => setSellDate(event.target.value)}
-            style={inputS}
-          />
-        </Field>
+        {showAdvancedSellForm && (
+          <>
+            <Field label={t("common.platform")}>
+              <select value={sellPlat} onChange={(event) => setSellPlat(event.target.value)} style={selectS}>
+                {PLATFORMS.map((platform) => (
+                  <option key={platform} value={platform}>
+                    {platformLabel(platform)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <Field label={t("common.date")}>
+              <input
+                type="date"
+                value={sellDate}
+                onChange={(event) => setSellDate(event.target.value)}
+                style={inputS}
+              />
+            </Field>
+          </>
+        )}
 
         <button
           onClick={sell}
